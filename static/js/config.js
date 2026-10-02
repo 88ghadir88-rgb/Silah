@@ -39,8 +39,8 @@ export const SIGNS = [
 export const DEMO_SCRIPT = [
   {
     caller: {
-      ar: "مرحباً، معك مصرف الإنماء. حاب أأكد موعدك في الفرع يوم الأحد الساعة العاشرة صباحاً؟",
-      en: "Hello, this is Bank Alinma. I'd like to confirm your branch appointment on Sunday at 10 AM?",
+      ar: "مرحباً، حاب أأكد الموعد؟",
+      en: "Hello, I would like to confirm the appointment?",
     },
     reply: ["yes"],
   },
