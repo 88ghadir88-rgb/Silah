@@ -3,273 +3,209 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>SignConnect</title>
-  <meta name="description" content="SignConnect - accessibility layer for phone calls (hackathon prototype)">
+  <title>SignConnect – Layla</title>
+  <meta name="description" content="SignConnect prototype – the Deaf user's phone">
   <link rel="icon" href="/static/assets/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/css/styles.css">
 </head>
-<body class="user-app">
+<body>
 
-<!-- Honest status strip: always visible above the phone frame -->
-<div class="prototype-strip">
-  <span><strong>SignConnect prototype</strong> · web simulation of a phone call (not connected to the cellular network)</span>
+<!-- ===== OPERATOR STRIP: demo controls OUTSIDE the phone. Not part of the SignConnect product. ===== -->
+<div class="operator">
+  <span><strong>Layla's phone</strong> · prototype: the incoming-call trigger is simulated (no cellular network)</span>
+  <span class="group">
+    <button class="op-btn" id="opRing">📞 Simulate incoming call (MVP trigger)</button>
+    <button class="op-btn demo hidden" id="opDemoLine">▶ DEMO: next scripted caller line</button>
+    <button class="op-btn demo hidden" id="opDemoReply">▶ DEMO: scripted reply (not AI)</button>
+    <button class="op-btn hidden" id="opType">⌨ Type reply (fallback)</button>
+  </span>
+  <span id="modelStatus">ASL model: checking…</span>
   <span id="netStatus" class="net ok">● server connected</span>
 </div>
 
-<main class="phone" id="phone">
-  <!-- Status bar inside the "phone" -->
-  <header class="phone-bar">
-    <span class="brand"><img src="/static/assets/logo.svg" alt="" width="20" height="20"> SignConnect</span>
-    <span id="modeBadge" class="badge live">LIVE AI</span>
-  </header>
+<main class="phone app-mode" id="phone">
+  <div class="statusbar"><span class="sb-time">8:11</span></div>
+  <div class="island"></div>
+  <div class="mode-flag hidden" id="modeFlag">DEMO MODE</div>
 
-  <!-- ======================= HOME ======================= -->
-  <section class="screen active" id="screen-home">
-    <div class="home-hero">
-      <div class="avatar big">S</div>
-      <h1>Hi Sara</h1>
-      <p class="muted">SignConnect is ready. Incoming calls will appear as text, and you can answer in sign language.</p>
+  <!-- ==================================================================
+       LAYER 1: SIGNCONNECT APP UI  (installed once, activated once)
+       Only two screens: Welcome/Activation and Settings/Permissions.
+       ================================================================== -->
+  <section class="screen app-screen active" id="app-welcome">
+    <div class="app-logo" data-icon="deaf"></div>
+    <h1>SignConnect</h1>
+    <p class="app-sub">Your sign-language bridge for phone calls.<br><span dir="rtl">جسرك بلغة الإشارة للمكالمات الهاتفية</span></p>
+    <ul class="app-features">
+      <li><span class="fi" data-icon="message"></span><span>Read what the caller says, as live text.</span></li>
+      <li><span class="fi" data-icon="hand"></span><span>Answer in sign language in front of the camera.</span></li>
+      <li><span class="fi" data-icon="speaker"></span><span>The caller hears your answer as a voice. They don't need any app.</span></li>
+    </ul>
+    <button class="app-btn" id="btnActivate">Activate SignConnect</button>
+    <p class="app-note">After activation, SignConnect opens automatically when a call arrives. You don't need to open the app again.</p>
+  </section>
+
+  <section class="screen app-screen" id="app-settings">
+    <div class="app-header"><h2>SignConnect</h2><span class="active-pill">● Active</span></div>
+    <div class="app-status">
+      <b>Ready for calls</b>
+      When a call arrives, the SignConnect call experience opens automatically.
     </div>
 
-    <div class="card">
-      <h2>Call settings</h2>
-      <label class="field">AI mode
-        <select id="setMode">
-          <option value="live">LIVE AI – real speech &amp; sign recognition</option>
-          <option value="demo">DEMO – pre-written caller lines (backup)</option>
-        </select>
-      </label>
-      <label class="field">The hearing caller is…
-        <select id="setCallerDevice">
-          <option value="same">on this laptop (speaks into this microphone)</option>
-          <option value="separate">on another device (open /caller there)</option>
-        </select>
-      </label>
-      <label class="field">Speech language
-        <select id="setLang">
-          <option value="en-US">English (en-US)</option>
-          <option value="ar-SA">Arabic (ar-SA)</option>
-        </select>
-      </label>
-      <label class="field">Room name (same on both devices)
+    <div class="section-title">Permissions</div>
+    <div class="list">
+      <div class="list-row">
+        <span class="li-icon" data-icon="camera"></span>
+        <span class="li-text">Camera<small>Recognizes your signs during a call</small></span>
+        <button class="perm-state ask" id="permCamera">Allow</button>
+      </div>
+      <div class="list-row">
+        <span class="li-icon" data-icon="phone"></span>
+        <span class="li-text">Phone calls<small>Open SignConnect when a call arrives. Production: native iOS telephony integration.</small></span>
+        <span class="perm-state sim">Simulated in MVP</span>
+      </div>
+      <div class="list-row">
+        <span class="li-icon" data-icon="message"></span>
+        <span class="li-text">Call audio → text<small>Convert the caller's voice to text. MVP: captured on the caller's device.</small></span>
+        <span class="perm-state sim">Simulated in MVP</span>
+      </div>
+      <div class="list-row">
+        <span class="li-icon" data-icon="speaker"></span>
+        <span class="li-text">Voice into the call<small>Speak your signed reply to the caller. MVP: played on the caller's device.</small></span>
+        <span class="perm-state sim">Simulated in MVP</span>
+      </div>
+      <div class="list-row">
+        <span class="li-icon" data-icon="bell"></span>
+        <span class="li-text">Notifications<small>Vibrate and flash for incoming calls</small></span>
+        <span class="perm-state sim">Simulated in MVP</span>
+      </div>
+    </div>
+
+    <div class="section-title">Settings</div>
+    <div class="list">
+      <div class="list-row">
+        <span class="li-text">AI mode<small>Demo = pre-written lines, clearly labeled</small></span>
+        <select id="setMode"><option value="live">Live AI</option><option value="demo">Demo (backup)</option></select>
+      </div>
+      <div class="list-row">
+        <span class="li-text">Call language</span>
+        <select id="setLang"><option value="ar-SA">العربية</option><option value="en-US">English</option></select>
+      </div>
+      <div class="list-row">
+        <span class="li-text">Call room<small>Same name on the caller's phone</small></span>
         <input id="setRoom" maxlength="32" autocomplete="off">
-      </label>
-      <p id="settingsWarning" class="warning hidden"></p>
-    </div>
-
-    <button class="btn primary big" id="btnSimulateCall">📞 Simulate incoming hospital call</button>
-    <p class="hint">Or open <a id="callerLink" href="/caller" target="_blank">the caller page</a> on another device and press “Call Sara”.</p>
-
-    <div class="card">
-      <h2>Sign model</h2>
-      <p id="modelStatus" class="muted">Loading…</p>
-      <div class="row">
-        <button class="btn" id="btnGoTrain">✋ Train signs</button>
-        <button class="btn" id="btnGoEval">📊 Test accuracy</button>
       </div>
     </div>
-    <p class="disclaimer">
-      This MVP recognizes a small set of static <strong>ASL (American Sign Language)</strong> handshapes using
-      Google’s pre-trained MediaPipe hand-tracking model plus a lightweight classifier calibrated on samples recorded by our team.
-      It is <strong>not</strong> full sign-language translation and does <strong>not</strong> support Saudi Sign Language yet.
-      Production use would require adaptation and validation for Saudi Sign Language with Deaf users.
-    </p>
+    <p class="app-note">Sign recognition uses a pre-trained English/ASL (American Sign Language) model to demonstrate technical feasibility. It does not support Saudi Sign Language yet. A production deployment would require adaptation, testing and validation for Saudi Sign Language (SSL).</p>
+    <button class="app-btn secondary" id="btnDeactivate">Deactivate SignConnect</button>
   </section>
 
-  <!-- ======================= 1. INCOMING CALL ======================= -->
-  <section class="screen screen-dark" id="screen-incoming">
-    <div class="sim-tag">SIMULATED INCOMING CALL</div>
-    <div class="incoming">
-      <div class="ring-flash"><div class="avatar huge">🏥</div></div>
-      <h1 id="incomingName">City General Hospital</h1>
-      <p id="incomingNumber" class="muted-light">+966 11 000 0000</p>
-      <p class="muted-light">SignConnect will caption the caller and voice your signs.</p>
-    </div>
-    <div class="call-actions">
-      <button class="round decline" id="btnDecline" aria-label="Decline">✕<span>Decline</span></button>
-      <button class="round accept" id="btnAnswer" aria-label="Answer">✆<span>Answer</span></button>
-    </div>
-  </section>
+  <!-- ==================================================================
+       LAYER 2: SIGNCONNECT CALL EXPERIENCE  (opens when a call arrives)
+       Our Figma call screens.
+       ================================================================== -->
 
-  <!-- ======================= 2. CALL CONNECTED ======================= -->
-  <section class="screen screen-dark" id="screen-connected">
-    <div class="sim-tag">SIMULATED CALL</div>
-    <div class="incoming">
-      <div class="avatar huge connected-pulse">🏥</div>
-      <h1>Call connected</h1>
-      <p class="muted-light" id="connectedName">City General Hospital</p>
-      <p class="timer" id="connectedTimer">00:00</p>
-      <p class="muted-light">The caller’s words will appear as text.</p>
+  <!-- Figma STEP 2 – Incoming call -->
+  <section class="screen call-screen ringing" id="call-incoming">
+    <div class="call-top">
+      <p class="call-small" id="inNumber">Mobile</p>
+      <h1 class="call-name callerName">Bank Alinma</h1>
+    </div>
+    <div class="spacer"></div>
+    <div class="incoming-extra">
+      <button class="cbtn mini" data-visual><span class="circle" data-icon="message"></span><small>Message</small></button>
+      <button class="cbtn mini" data-visual><span class="circle" data-icon="alarm"></span><small>Remind Me</small></button>
+    </div>
+    <div class="incoming-main">
+      <button class="cbtn big red" id="btnDecline"><span class="circle" data-icon="endCall"></span><small>Decline</small></button>
+      <button class="cbtn big green" id="btnAccept"><span class="circle" data-icon="phone"></span><small>Accept</small></button>
     </div>
   </section>
 
-  <!-- ======================= 3. CALLER SPEECH → TEXT ======================= -->
-  <section class="screen" id="screen-listen">
-    <div class="call-head">
-      <div class="avatar">🏥</div>
-      <div><strong class="callName">City General Hospital</strong><br><span class="timer callTimer">00:00</span></div>
-      <button class="btn danger small" data-action="end">End</button>
+  <!-- Figma STEP 3 – Call connected -->
+  <section class="screen call-screen" id="call-connected">
+    <div class="call-top">
+      <p class="call-small callTimer">00:00</p>
+      <h1 class="call-name callerName">Bank Alinma</h1>
     </div>
-    <div class="step-label">Caller speech → text</div>
-    <div id="micStatus" class="mic-status"></div>
-    <div class="live-caption" aria-live="polite">
-      <div class="caption-label">Caller is saying:</div>
-      <div id="captionMain" class="caption-main" dir="auto">Waiting for the caller to speak…</div>
-      <div id="captionInterim" class="caption-interim" dir="auto"></div>
-    </div>
-    <div id="demoCallerControls" class="hidden">
-      <button class="btn demo" id="btnDemoNextLine">▶ Play next scripted caller line (DEMO)</button>
-    </div>
-    <div class="transcript" id="transcriptListen"></div>
-    <div class="bottom-actions">
-      <button class="btn primary big" id="btnReplySign">✋ Reply in sign language</button>
-      <button class="btn link" data-action="type">⌨ Type instead</button>
+    <div class="spacer"></div>
+    <button class="sc-pill" id="btnSignConnect"><span class="ic" data-icon="deaf"></span>SignConnect</button>
+    <div class="controls">
+      <button class="cbtn" data-visual><span class="circle" data-icon="speaker"></span><small>Speaker</small></button>
+      <button class="cbtn" data-camera><span class="circle" data-icon="video"></span><small>FaceTime</small></button>
+      <button class="cbtn" data-visual><span class="circle" data-icon="micOff"></span><small>Mute</small></button>
+      <button class="cbtn" data-visual><span class="circle" data-icon="more"></span><small>More</small></button>
+      <button class="cbtn red" data-end><span class="circle" data-icon="endCall"></span><small>End</small></button>
+      <button class="cbtn" data-visual><span class="circle" data-icon="keypad"></span><small>Keypad</small></button>
     </div>
   </section>
 
-  <!-- ======================= 4. SIGN LANGUAGE CAMERA ======================= -->
-  <section class="screen" id="screen-camera">
-    <div class="call-head">
-      <div class="avatar">🏥</div>
-      <div><strong class="callName">City General Hospital</strong><br><span class="timer callTimer">00:00</span></div>
-      <button class="btn danger small" data-action="end">End</button>
+  <!-- Figma STEP 5 – Caller speech → text -->
+  <section class="screen call-screen" id="call-speech">
+    <button class="back-btn" id="btnSpeechBack" aria-label="Back" data-icon="back"></button>
+    <div class="call-top">
+      <h1 class="call-name callerName">Bank Alinma</h1>
     </div>
-    <div class="step-label">Sign language camera</div>
-    <div class="caller-strip" dir="auto"><span>Caller:</span> <span class="lastCallerText">…</span></div>
-    <div class="camera-slot" id="slot-camera"></div>
-    <div class="draft">
-      <div class="caption-label">Recognized signs</div>
-      <div id="draftChips" class="chips"><span class="muted">Hold a sign steady for a moment…</span></div>
+    <div class="spacer" style="max-height:90px"></div>
+    <p class="call-label">Conversion Speech → Text</p>
+    <div class="call-card speech-box" aria-live="polite">
+      <div id="speechOld" class="speech-old" dir="auto"></div>
+      <div id="speechText" class="speech-text" dir="auto"><span class="speech-wait">Waiting for the caller to speak…</span></div>
     </div>
-    <div id="demoSignControls" class="hidden">
-      <button class="btn demo" id="btnDemoReply">▶ Use scripted reply (DEMO – not recognized by AI)</button>
-    </div>
-    <div class="bottom-actions row">
-      <button class="btn" id="btnCameraBack">← Back</button>
-      <button class="btn" id="btnDraftUndo">Undo</button>
-      <button class="btn primary" id="btnDraftDone">Review →</button>
+    <div id="speechSource" class="src-line"></div>
+    <div class="spacer"></div>
+    <div class="end-row">
+      <button class="cbtn" data-camera><span class="circle" data-icon="hand"></span><small>Sign</small></button>
+      <button class="cbtn red" data-end><span class="circle" data-icon="endCall"></span><small>End</small></button>
     </div>
   </section>
 
-  <!-- ======================= 5. SIGN → TEXT ======================= -->
-  <section class="screen" id="screen-review">
-    <div class="call-head">
-      <div class="avatar">🏥</div>
-      <div><strong class="callName">City General Hospital</strong><br><span class="timer callTimer">00:00</span></div>
-      <button class="btn danger small" data-action="end">End</button>
+  <!-- Figma STEP 6 – Sign language camera (→ text) -->
+  <section class="screen call-screen" id="call-sign">
+    <div class="call-top" style="margin-top:14px">
+      <p class="call-small callTimer">00:00</p>
+      <h1 class="call-name callerName" style="font-size:1.6rem">Bank Alinma</h1>
+      <p class="caller-line" id="signCallerLine" dir="auto"></p>
     </div>
-    <div class="step-label">Sign → text</div>
-    <div class="card center">
-      <div class="caption-label">You signed</div>
-      <div id="reviewChips" class="chips center"></div>
-      <div class="caption-label">The caller will hear</div>
-      <div id="reviewText" class="review-text" dir="auto"></div>
-      <div id="reviewSource" class="source-tag"></div>
+    <div class="cam-card">
+      <canvas id="camCanvas"></canvas>
+      <span class="ai-badge" id="aiBadge">SignConnect AI</span>
+      <span class="cam-stats" id="camStats"></span>
+      <div class="cam-msg" id="camMsg">Starting camera…</div>
     </div>
-    <div class="bottom-actions">
-      <button class="btn primary big" id="btnSendReply">🔊 Speak to caller</button>
-      <button class="btn" id="btnSignAgain">✋ Sign again</button>
+    <div class="sign-pill muted" id="signPill">
+      <span class="pill-text" id="pillText" dir="auto">Raise your hand, sign, then lower your hand</span>
+      <button class="pill-act hidden" id="btnRetry" aria-label="Sign again" data-icon="retry"></button>
+      <button class="pill-act send hidden" id="btnSend" aria-label="Send" data-icon="check"></button>
     </div>
-  </section>
-
-  <!-- ======================= 6. TEXT → SPEECH ======================= -->
-  <section class="screen" id="screen-speak">
-    <div class="call-head">
-      <div class="avatar">🏥</div>
-      <div><strong class="callName">City General Hospital</strong><br><span class="timer callTimer">00:00</span></div>
-      <button class="btn danger small" data-action="end">End</button>
-    </div>
-    <div class="step-label">Text → speech</div>
-    <div class="speaking">
-      <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-      <div id="speakStatus" class="caption-label">Speaking to the caller…</div>
-      <div id="speakText" class="review-text" dir="auto"></div>
-      <div id="speakDetail" class="muted small"></div>
+    <div class="sign-detail" id="signDetail"></div>
+    <div class="spacer"></div>
+    <div class="controls">
+      <button class="cbtn" data-visual><span class="circle" data-icon="speaker"></span><small>Speaker</small></button>
+      <button class="cbtn on" id="btnCameraOff"><span class="circle" data-icon="video"></span><small>FaceTime</small></button>
+      <button class="cbtn" data-visual><span class="circle" data-icon="micOff"></span><small>Mute</small></button>
+      <button class="cbtn" data-visual><span class="circle" data-icon="more"></span><small>More</small></button>
+      <button class="cbtn red" data-end><span class="circle" data-icon="endCall"></span><small>End</small></button>
+      <button class="cbtn" data-visual><span class="circle" data-icon="keypad"></span><small>Keypad</small></button>
     </div>
   </section>
 
-  <!-- ======================= 7. CALL SUMMARY ======================= -->
-  <section class="screen" id="screen-summary">
-    <div class="step-label">Call summary</div>
-    <div class="card center">
-      <div class="avatar big">🏥</div>
-      <h2 id="sumTitle">Call ended</h2>
-      <p id="sumOutcome" class="muted"></p>
+  <!-- Call summary (same visual language as the Figma call screens) -->
+  <section class="screen call-screen summary" id="call-summary">
+    <div class="call-top">
+      <p class="call-small" id="sumDuration">Call ended</p>
+      <h1 class="call-name callerName">Bank Alinma</h1>
+      <p class="call-hint" id="sumOutcome"></p>
     </div>
-    <div class="metrics" id="sumMetrics"></div>
-    <div class="card">
-      <h2>Transcript</h2>
-      <div class="transcript" id="sumTranscript"></div>
-    </div>
-    <div class="card">
-      <h2>What was live, demo or typed</h2>
-      <div id="sumHonesty" class="small"></div>
-    </div>
-    <div class="bottom-actions">
-      <button class="btn primary big" id="btnBackHome">Done</button>
-    </div>
+    <div class="sum-grid" id="sumGrid"></div>
+    <div class="sum-h">Conversation</div>
+    <div id="sumTranscript"></div>
+    <div class="sum-h">What was live, demo or typed</div>
+    <ul class="honesty" id="sumHonesty"></ul>
+    <button class="wide-btn" id="btnSummaryDone">Done</button>
   </section>
 
-  <!-- ======================= TRAIN SIGNS ======================= -->
-  <section class="screen" id="screen-train">
-    <div class="tool-head"><button class="btn small" data-action="home">← Home</button><h2>Train signs</h2></div>
-    <p class="small muted">For each sign: press <b>Record</b>, show the handshape and move your hand slightly
-      (closer/further, small turns) for 4 seconds. Record each sign 2–3 times, ideally by 2 different people.</p>
-    <div class="camera-slot" id="slot-train"></div>
-    <div id="trainLive" class="live-pred">Live guess: –</div>
-    <div id="trainList" class="train-list"></div>
-    <div class="row wrap">
-      <button class="btn" id="btnExport">⬇ Download model file</button>
-      <label class="btn">⬆ Load model file<input type="file" id="fileImport" accept=".json,application/json" hidden></label>
-      <button class="btn" id="btnLoadBundled">↺ Use bundled model</button>
-      <button class="btn danger" id="btnClearAll">Delete all samples</button>
-    </div>
-    <p class="small muted" id="trainSource"></p>
-  </section>
-
-  <!-- ======================= EVALUATE ======================= -->
-  <section class="screen" id="screen-eval">
-    <div class="tool-head"><button class="btn small" data-action="home">← Home</button><h2>Test accuracy</h2></div>
-    <p class="small muted">Measures real recognition accuracy. Fair test: the tester should be a person whose samples were
-      <b>not</b> used for training, or at least record on a different day / lighting.</p>
-    <div class="row">
-      <input id="evalTester" placeholder="Tester name" maxlength="60">
-      <select id="evalTrials"><option value="3">3 tries per sign</option><option value="5" selected>5 tries per sign</option><option value="10">10 tries per sign</option></select>
-    </div>
-    <div class="camera-slot" id="slot-eval"></div>
-    <div id="evalPrompt" class="eval-prompt">Press Start.</div>
-    <div class="row">
-      <button class="btn primary" id="btnEvalStart">▶ Start test</button>
-      <button class="btn" id="btnEvalStop">Stop</button>
-    </div>
-    <div id="evalResults"></div>
-  </section>
-
-  <!-- The ONE camera view. JavaScript moves it into whichever screen needs it. -->
-  <div id="cameraRig" class="camera-rig">
-    <video id="video" playsinline muted></video>
-    <canvas id="overlay"></canvas>
-    <div class="hud">
-      <span id="hudSign" class="hud-sign"></span>
-      <div class="hold"><div id="hudHold"></div></div>
-      <span id="hudStats" class="hud-stats"></span>
-    </div>
-    <div id="cameraMessage" class="camera-message">Starting camera…</div>
-  </div>
-
-  <!-- Typed-reply dialog (manual fallback, always labeled TYPED) -->
-  <dialog id="typeDialog">
-    <form method="dialog">
-      <h2>Type a reply</h2>
-      <p class="small muted">Manual fallback. It will be labeled “TYPED”, not sign recognition.</p>
-      <textarea id="typeText" rows="3" maxlength="300" dir="auto"></textarea>
-      <div class="row">
-        <button class="btn" value="cancel">Cancel</button>
-        <button class="btn primary" value="send" id="btnTypeSend">Send</button>
-      </div>
-    </form>
-  </dialog>
-
+  <div class="home-indicator"></div>
   <div id="toast" class="toast"></div>
 </main>
 

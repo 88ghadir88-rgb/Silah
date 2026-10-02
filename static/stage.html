@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SignConnect – Demo Stage</title>
+  <link rel="icon" href="/static/assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <!-- One-laptop demo: both phones side by side. With two devices, open /caller and / separately. -->
+  <div class="operator"><span><strong>Demo stage</strong> · left: the hearing caller (needs no app) · right: Layla's phone with SignConnect · the phone call itself is simulated</span></div>
+  <div class="stage">
+    <figure>
+      <figcaption>Hearing caller – Bank Alinma</figcaption>
+      <iframe id="callerFrame" allow="microphone; autoplay" title="Caller phone"></iframe>
+    </figure>
+    <figure>
+      <figcaption>Deaf user – Layla (SignConnect)</figcaption>
+      <iframe id="userFrame" allow="camera; microphone; autoplay" title="Layla phone"></iframe>
+    </figure>
+  </div>
+  <script>
+    // Pass ?room=... and ?lang=... through to both phones.
+    const q = location.search;
+    document.getElementById("callerFrame").src = "/caller" + q;
+    document.getElementById("userFrame").src = "/" + q;
+  </script>
+</body>
+</html>

@@ -1,20 +1,23 @@
-// SignConnect - the hearing caller's page (/caller).
-// Listens to the caller's voice (speech-to-text), sends the text to Sara,
-// and speaks Sara's signed replies out loud (text-to-speech).
+// SignConnect - the hearing caller's phone (/caller). The caller does NOT install SignConnect.
+// Figma steps: STEP 1 calling -> STEP 4 "you are talking to Layla" -> STEP 7 sign language -> voice.
+//
+// What happens here:
+//   - the caller's voice -> speech-to-text (browser Web Speech API) -> sent to Layla's screen
+//   - Layla's signed reply arrives -> text-to-speech (browser voice) -> the caller hears it
 
 import { Api } from "./api.js";
-import { SpeechToText, sttSupported, ttsSupported, speak, unlockSpeech } from "./speech.js";
+import { DEMO_SCRIPT, NAMES, langKey } from "./config.js";
+import { SpeechToText, sttSupported, speak, unlockSpeech } from "./speech.js";
+import { applyIcons } from "./icons.js";
+import { $, escapeHtml, toast, startStatusClock, setNetStatus } from "./ui.js";
 
-const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-
-const SETTINGS_KEY = "signconnect.caller.v1";
+const SETTINGS_KEY = "signconnect.caller.v2";
 let saved = {};
 try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}"); } catch (e) { /* ignore */ }
 const settings = {
-  room: params.get("room") || saved.room || "sara",
-  lang: params.get("lang") || saved.lang || "en-US",
-  name: saved.name || "City General Hospital",
+  room: params.get("room") || saved.room || "layla",
+  lang: params.get("lang") || saved.lang || "ar-SA",
 };
 
 let api = new Api(settings.room, "caller");
@@ -22,39 +25,30 @@ const stt = new SpeechToText();
 let room = null;
 let callId = null;
 let messages = [];
-let screen = "c-setup";
+let screen = "c-dial";
+let muted = false;
 let speakQueue = Promise.resolve();
-let timer = null;
 let micError = "";
-
-const SOURCE_LABELS = {
-  live_stt: ["LIVE · speech-to-text", "live"],
-  live_sign: ["LIVE · sign recognition", "live"],
-  typed: ["TYPED", "typed"],
-  demo_script: ["DEMO · pre-written", "demo"],
-};
-
-function escapeHtml(text) {
-  return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
-function toast(message, ms = 4000) {
-  const el = $("toast");
-  el.textContent = message;
-  el.classList.add("show");
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => el.classList.remove("show"), ms);
-}
 
 function show(id) {
   if (id === screen) return;
   const previous = screen;
   screen = id;
   document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("active", s.id === id));
-  if (id === "c-call") startMic();
-  if (previous === "c-call") stt.stop();
-  const badge = { "c-setup": "READY", "c-ringing": "RINGING", "c-call": "IN CALL", "c-ended": "ENDED" }[id];
-  $("statusBadge").textContent = badge;
+  const talking = id === "c-talking" || id === "c-reply";
+  const wasTalking = previous === "c-talking" || previous === "c-reply";
+  if (talking && !wasTalking) startMic();
+  if (!talking && wasTalking) { stt.stop(); updateMic("off"); }
+  updateChrome();
+}
+
+function updateChrome() {
+  const talking = screen === "c-talking" || screen === "c-reply";
+  const demo = talking && room?.mode === "demo";
+  $("modeFlag").classList.toggle("hidden", !demo);
+  $("opDemoLine").classList.toggle("hidden", !demo);
+  $("cTypeText").classList.toggle("hidden", !talking);
+  $("cTypeSend").classList.toggle("hidden", !talking);
 }
 
 // ---------------------------------------------------------------------------
@@ -62,29 +56,15 @@ function show(id) {
 // ---------------------------------------------------------------------------
 $("cRoom").value = settings.room;
 $("cLang").value = settings.lang;
-$("cName").value = settings.name;
-
-function saveSettings() {
-  settings.room = $("cRoom").value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "") || "sara";
-  settings.lang = $("cLang").value;
-  settings.name = $("cName").value.trim() || "City General Hospital";
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* ignore */ }
-}
-
-["cRoom", "cLang", "cName"].forEach((id) => $(id).addEventListener("change", () => {
+const saveSettings = () => {
   const oldRoom = settings.room;
-  saveSettings();
+  settings.room = $("cRoom").value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "") || "layla";
+  settings.lang = $("cLang").value;
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* ignore */ }
   if (settings.room !== oldRoom) connect();
-}));
-
-const warnings = [];
-if (!window.isSecureContext) warnings.push("The microphone only works on https:// (use the Render link) or http://localhost.");
-if (!sttSupported()) warnings.push("This browser has no speech recognition. Use Google Chrome (Android/desktop) or Edge. You can still type.");
-if (!ttsSupported()) warnings.push("This browser cannot speak text aloud.");
-if (warnings.length) {
-  $("cWarning").innerHTML = warnings.map(escapeHtml).join("<br>");
-  $("cWarning").classList.remove("hidden");
-}
+};
+$("cRoom").addEventListener("change", saveSettings);
+$("cLang").addEventListener("change", saveSettings);
 
 // ---------------------------------------------------------------------------
 // Server connection
@@ -93,10 +73,7 @@ function connect() {
   api.stopPolling();
   api = new Api(settings.room, "caller");
   callId = null;
-  api.startPolling(onUpdate, (online) => {
-    $("netStatus").textContent = online ? "● server connected" : "● server unreachable – retrying…";
-    $("netStatus").className = `net ${online ? "ok" : "bad"}`;
-  });
+  api.startPolling(onUpdate, setNetStatus);
 }
 
 function onUpdate({ room: newRoom, messages: newMessages }) {
@@ -104,83 +81,74 @@ function onUpdate({ room: newRoom, messages: newMessages }) {
   if (room.call_id !== callId) {
     callId = room.call_id;
     messages = [];
-    render();
   }
   newMessages.forEach(ingest);
 
-  if (room.status === "ringing" && screen === "c-setup" && room.ring_origin === "caller_page") show("c-ringing");
-  if (room.status === "connected" && (screen === "c-ringing" || screen === "c-setup")) startCallScreen();
-  if (room.status === "ended" && (screen === "c-ringing" || screen === "c-call")) {
-    $("cEndedText").textContent = room.connected_at ? "The call has ended." : "Sara did not answer.";
-    clearInterval(timer);
+  if (room.status === "ringing" && screen === "c-dial") show("c-calling");
+  if (room.status === "connected" && (screen === "c-calling" || screen === "c-dial")) show("c-talking");
+  if (room.status === "ended" && ["c-calling", "c-talking", "c-reply"].includes(screen)) {
+    $("cEndedText").textContent = room.connected_at ? "Call ended" : "No answer";
     show("c-ended");
   }
+  updateChrome();
 }
 
 function ingest(message) {
   if (messages.some((m) => m.seq === message.seq)) return;
   messages.push(message);
   messages.sort((a, b) => a.seq - b.seq);
-  render();
-  // Speak every reply from Sara exactly once, in order.
-  if (message.sender === "user" && !message.spoken_at && screen === "c-call") {
-    speakQueue = speakQueue.then(() => speakReply(message));
+  if (message.sender === "caller") {
+    const text = `You: “${message.text}”`;
+    $("youSaid").textContent = text;
+    $("youSaid2").textContent = text;
   }
-}
-
-function render() {
-  $("cTranscript").innerHTML = messages.map((m) => {
-    const [label, css] = SOURCE_LABELS[m.source] || [m.source, ""];
-    return `<div class="bubble ${m.sender === "caller" ? "user" : "caller"}">
-      <div class="who">${m.sender === "caller" ? "You" : "Sara"} <span class="tag ${css}">${label}</span></div>
-      <div dir="auto">${escapeHtml(m.text)}</div></div>`;
-  }).join("");
-  $("cTranscript").scrollTop = $("cTranscript").scrollHeight;
+  // Every reply from Layla is spoken exactly once, in order (Figma step 7).
+  if (message.sender === "user" && !message.spoken_at && (screen === "c-talking" || screen === "c-reply")) {
+    speakQueue = speakQueue.then(() => playReply(message));
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Call control
 // ---------------------------------------------------------------------------
 $("btnCall").addEventListener("click", async () => {
-  unlockSpeech(); // iPhone/Safari: speech must be unlocked by a tap
-  saveSettings();
+  unlockSpeech(); // phones only allow speech after a tap
   try {
-    await api.ring({ mode: "live", origin: "caller_page", caller_name: settings.name });
-    show("c-ringing");
+    await api.ring({ mode: "live", origin: "caller_page", caller_name: NAMES.caller });
+    show("c-calling");
   } catch (error) {
     toast("Could not call: " + error.message);
   }
 });
-
-$("btnCancel").addEventListener("click", () => api.end().catch(() => {}));
-$("btnHangUp").addEventListener("click", () => api.end().catch(() => {}));
-$("btnNew").addEventListener("click", () => show("c-setup"));
-
-function startCallScreen() {
-  show("c-call");
-  clearInterval(timer);
-  timer = setInterval(() => {
-    if (!room?.connected_at) return;
-    const s = Math.max(0, Math.floor((api.serverNow() - room.connected_at) / 1000));
-    $("cTimer").textContent = `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-  }, 500);
-}
+document.querySelectorAll("[data-end]").forEach((b) => b.addEventListener("click", () => api.end().catch(() => {})));
+document.querySelectorAll("[data-visual]").forEach((b) => b.addEventListener("click", () => toast("Visual only in this prototype")));
+$("btnNew").addEventListener("click", () => show("c-dial"));
+$("btnReplyBack").addEventListener("click", () => show("c-talking"));
+$("btnMute").addEventListener("click", () => {
+  muted = !muted;
+  $("btnMute").classList.toggle("on", muted);
+  if (muted) { stt.pause(); updateMic("muted"); } else { stt.resume(); }
+});
 
 // ---------------------------------------------------------------------------
-// Speech-to-text (caller's voice -> Sara's screen)
+// Speech-to-text: the caller's voice -> Layla's screen
 // ---------------------------------------------------------------------------
 function startMic() {
   micError = "";
-  updateMic("starting");
+  muted = false;
+  $("btnMute").classList.remove("on");
+  if (!sttSupported()) {
+    micError = "No speech recognition in this browser – use Chrome, or type.";
+    updateMic("error");
+    return;
+  }
   stt.start(settings.lang, {
     onState: updateMic,
-    onInterim: (text) => { $("cInterim").textContent = text + " …"; },
+    onInterim: (text) => { $("youSaid").textContent = `🎙 ${text} …`; $("youSaid2").textContent = `🎙 ${text} …`; },
     onFinal: async (text, { finalizeMs }) => {
-      $("cInterim").textContent = text;
-      const originAt = api.serverNow();
       try {
         const result = await api.sendMessage({
-          sender: "caller", source: "live_stt", text, originAt,
+          sender: "caller", source: "live_stt", text, originAt: api.serverNow(),
           meta: { stt_finalize_ms: finalizeMs, lang: settings.lang, engine: "Web Speech API" },
         });
         ingest(result.message);
@@ -193,42 +161,66 @@ function startMic() {
 }
 
 function updateMic(state) {
-  const el = $("cMic");
-  if (micError) el.innerHTML = `<span class="dot bad"></span> ${escapeHtml(micError)}`;
-  else if (state === "paused") el.innerHTML = '<span class="dot"></span> Microphone paused while Sara’s reply is spoken';
-  else if (state === "listening" || state === "restarting") el.innerHTML = '<span class="dot ok pulse"></span> Microphone on – live speech-to-text';
-  else el.innerHTML = '<span class="dot"></span> Microphone starting…';
+  const labels = {
+    listening: "🎙 listening (live speech-to-text)", restarting: "🎙 listening (live speech-to-text)",
+    paused: "🔇 mic paused while Layla's reply plays", muted: "🔇 muted", off: "🎙 mic off", stopped: "🎙 mic off",
+  };
+  $("cMic").textContent = micError ? `⚠ ${micError}` : labels[state] || "🎙 starting…";
 }
 
-$("cTypeForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
+async function sendTyped() {
   const text = $("cTypeText").value.trim();
   if (!text) return;
   try {
-    const result = await api.sendMessage({ sender: "caller", source: "typed", text });
+    ingest((await api.sendMessage({ sender: "caller", source: "typed", text })).message);
     $("cTypeText").value = "";
-    ingest(result.message);
   } catch (error) {
-    toast("Could not send: " + error.message);
+    toast(error.message);
+  }
+}
+$("cTypeSend").addEventListener("click", sendTyped);
+$("cTypeText").addEventListener("keydown", (e) => { if (e.key === "Enter") sendTyped(); });
+
+$("opDemoLine").addEventListener("click", async () => {
+  const index = messages.filter((m) => m.sender === "caller" && m.source === "demo_script").length;
+  const line = DEMO_SCRIPT[index];
+  if (!line) { toast("Demo script finished."); return; }
+  try {
+    ingest((await api.sendMessage({ sender: "caller", source: "demo_script", text: line.caller[langKey(settings.lang)] })).message);
+  } catch (error) {
+    toast(error.message);
   }
 });
 
 // ---------------------------------------------------------------------------
-// Text-to-speech (Sara's reply -> caller hears it)
+// Figma step 7: Layla's reply -> text + voice
 // ---------------------------------------------------------------------------
-async function speakReply(message) {
-  $("cSpeakingText").textContent = message.text;
-  $("cSpeaking").classList.remove("hidden");
-  stt.pause(); // do not transcribe our own loudspeaker
+async function playReply(message) {
+  const chip = {
+    live_sign: ["Translated from sign language", ""],
+    demo_script: ["DEMO · pre-written, not AI", "demo"],
+    typed: ["Typed by Layla", "typed"],
+  }[message.source] || [message.source, ""];
+  $("replyText").textContent = message.text;
+  $("replyChip").textContent = chip[0];
+  $("replyChip").className = `chip-src ${chip[1]}`;
+  $("replyDetail").innerHTML = message.meta?.signs?.length
+    ? `Signs: ${escapeHtml(message.meta.signs.join(" + ").toUpperCase())}${message.meta.confidence ? ` · ${Math.round(message.meta.confidence * 100)}%` : ""}`
+    : "";
+  show("c-reply");
+  $("replyWave").classList.add("playing");
+  stt.pause(); // don't transcribe our own loudspeaker
   updateMic("paused");
   try {
     const { played } = await speak(message.text, settings.lang, { onStart: () => api.ack(message.seq, "spoken") });
-    if (!played) toast("The browser did not play the audio. Check the volume or use Google Chrome.");
+    if (!played) toast("The browser did not play the audio. Check the volume or use Chrome.");
   } catch (error) {
     toast("Could not play audio: " + error.message);
   }
-  $("cSpeaking").classList.add("hidden");
-  if (screen === "c-call") { stt.resume(); updateMic("listening"); }
+  $("replyWave").classList.remove("playing");
+  if (!muted && (screen === "c-talking" || screen === "c-reply")) stt.resume();
 }
 
+applyIcons();
+startStatusClock();
 connect();

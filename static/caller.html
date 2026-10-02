@@ -3,86 +3,114 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>SignConnect Caller</title>
+  <title>SignConnect – Caller</title>
   <link rel="icon" href="/static/assets/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/css/styles.css">
 </head>
-<body class="caller-app">
+<body>
 
-<div class="prototype-strip">
-  <span><strong>Hearing caller</strong> · this page plays the role of the hospital’s phone (simulated call, no cellular network)</span>
+<!-- Operator strip: demo controls OUTSIDE the phone (not part of the product) -->
+<div class="operator">
+  <span><strong>Caller's phone (Bank Alinma)</strong> · the caller needs no app · simulated call</span>
+  <span class="group">
+    room <input class="op-input" id="cRoom" style="min-width:70px;width:80px">
+    <select class="op-input" id="cLang" style="min-width:90px"><option value="ar-SA">العربية</option><option value="en-US">English</option></select>
+  </span>
+  <span class="group">
+    <button class="op-btn demo hidden" id="opDemoLine">▶ DEMO: next scripted line</button>
+    <input class="op-input hidden" id="cTypeText" placeholder="Type instead (fallback)…" dir="auto">
+    <button class="op-btn hidden" id="cTypeSend">Send</button>
+  </span>
+  <span id="cMic">🎙 mic off</span>
   <span id="netStatus" class="net ok">● server connected</span>
 </div>
 
-<main class="phone caller-phone">
-  <header class="phone-bar">
-    <span class="brand">🏥 Hospital phone</span>
-    <span id="statusBadge" class="badge">READY</span>
-  </header>
+<main class="phone" id="phone">
+  <div class="statusbar"><span class="sb-time">8:11</span></div>
+  <div class="island"></div>
+  <div class="mode-flag hidden" id="modeFlag">DEMO MODE</div>
 
-  <!-- Before the call -->
-  <section class="screen active" id="c-setup">
-    <div class="home-hero">
-      <div class="avatar big">🏥</div>
-      <h1>Appointments Desk</h1>
-      <p class="muted">You are the hearing caller. Speak normally – Sara will read your words. Her signed replies will be spoken aloud here.</p>
+  <!-- Before the call: the caller's ordinary phone (not part of the Figma flow) -->
+  <section class="screen call-screen active" id="c-dial">
+    <div class="call-top">
+      <p class="call-small">Contact</p>
+      <h1 class="call-name">Layla</h1>
+      <p class="call-hint">Customer · <span dir="rtl">عميلة</span></p>
     </div>
-    <div class="card">
-      <label class="field">Room name (same as Sara’s screen)<input id="cRoom" maxlength="32"></label>
-      <label class="field">Your language
-        <select id="cLang"><option value="en-US">English (en-US)</option><option value="ar-SA">Arabic (ar-SA)</option></select>
-      </label>
-      <label class="field">Calling as<input id="cName" maxlength="80" value="City General Hospital"></label>
-      <p id="cWarning" class="warning hidden"></p>
+    <div class="spacer"></div>
+    <div class="end-row">
+      <button class="cbtn big green" id="btnCall"><span class="circle" data-icon="phone"></span><small>Call</small></button>
     </div>
-    <button class="btn primary big" id="btnCall">📞 Call Sara</button>
-    <p class="hint">On Sara’s laptop, set “The hearing caller is…” to <b>on another device</b>.</p>
   </section>
 
-  <!-- Ringing -->
-  <section class="screen screen-dark" id="c-ringing">
-    <div class="sim-tag">SIMULATED CALL</div>
-    <div class="incoming">
-      <div class="ring-flash"><div class="avatar huge">S</div></div>
-      <h1>Calling Sara…</h1>
-      <p class="muted-light">Waiting for Sara to answer on SignConnect</p>
+  <!-- Figma STEP 1 – Calling... -->
+  <section class="screen call-screen" id="c-calling">
+    <div class="call-top">
+      <p class="call-small">Calling...</p>
+      <h1 class="call-name">Layla</h1>
     </div>
-    <div class="call-actions single"><button class="round decline" id="btnCancel">✕<span>Cancel</span></button></div>
+    <div class="spacer"></div>
+    <div class="controls">
+      <button class="cbtn" data-visual><span class="circle" data-icon="speaker"></span><small>Speaker</small></button>
+      <button class="cbtn" data-visual><span class="circle" data-icon="video"></span><small>FaceTime</small></button>
+      <button class="cbtn" data-visual><span class="circle" data-icon="micOff"></span><small>Mute</small></button>
+      <button class="cbtn" data-visual><span class="circle" data-icon="more"></span><small>More</small></button>
+      <button class="cbtn red" data-end><span class="circle" data-icon="endCall"></span><small>End</small></button>
+      <button class="cbtn" data-visual><span class="circle" data-icon="keypad"></span><small>Keypad</small></button>
+    </div>
   </section>
 
-  <!-- In call -->
-  <section class="screen" id="c-call">
-    <div class="call-head">
-      <div class="avatar">S</div>
-      <div><strong>Sara (via SignConnect)</strong><br><span class="timer" id="cTimer">00:00</span></div>
-      <button class="btn danger small" id="btnHangUp">End</button>
+  <!-- Figma STEP 4 – You are talking to Layla (Deaf user) -->
+  <section class="screen call-screen" id="c-talking">
+    <div class="call-top">
+      <p class="call-small" style="font-size:.78rem">You are talking to</p>
+      <h1 class="call-name">Layla</h1>
+      <p class="call-hint">Deaf is using sign language<br>Their message will appear translated here</p>
     </div>
-    <div id="cMic" class="mic-status"></div>
-    <div class="live-caption">
-      <div class="caption-label">What Sara reads (your words):</div>
-      <div id="cInterim" class="caption-interim" dir="auto">Start speaking…</div>
+    <div class="spacer" style="max-height:60px"></div>
+    <div class="call-card deaf-card">
+      <span class="ic" data-icon="deaf"></span>
+      <div><b>Deaf user !</b><span dir="rtl">مستخدم من فئة الصم</span></div>
     </div>
-    <div id="cSpeaking" class="speaking-bar hidden">
-      <div class="wave small"><i></i><i></i><i></i><i></i><i></i></div>
-      <span>Sara says: <b id="cSpeakingText" dir="auto"></b></span>
+    <p class="tiny" id="youSaid" dir="auto" style="margin-top:16px"></p>
+    <div class="spacer"></div>
+    <div class="end-row">
+      <button class="cbtn" id="btnMute"><span class="circle" data-icon="micOff"></span><small>Mute</small></button>
+      <button class="cbtn red" data-end><span class="circle" data-icon="endCall"></span><small>End</small></button>
     </div>
-    <div class="transcript" id="cTranscript"></div>
-    <form id="cTypeForm" class="row">
-      <input id="cTypeText" placeholder="Type instead (fallback)…" maxlength="300" dir="auto">
-      <button class="btn">Send</button>
-    </form>
   </section>
 
-  <!-- Ended -->
-  <section class="screen" id="c-ended">
-    <div class="home-hero">
-      <div class="avatar big">✓</div>
-      <h1>Call ended</h1>
-      <p class="muted" id="cEndedText"></p>
+  <!-- Figma STEP 7 – Sign language → text / voice -->
+  <section class="screen call-screen" id="c-reply">
+    <button class="back-btn" id="btnReplyBack" aria-label="Back" data-icon="back"></button>
+    <div class="call-top">
+      <h1 class="call-name">Layla</h1>
     </div>
-    <button class="btn primary big" id="btnNew">New call</button>
+    <div class="spacer" style="max-height:70px"></div>
+    <p class="call-label">Sign Language → Text / Voice</p>
+    <div class="call-card">
+      <div class="reply-text" id="replyText" dir="auto"></div>
+      <span class="chip-src" id="replyChip">Translated from sign language</span>
+      <div class="waveform" id="replyWave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+    <p class="tiny" id="replyDetail" style="margin-top:10px"></p>
+    <p class="tiny" id="youSaid2" dir="auto"></p>
+    <div class="spacer"></div>
+    <div class="end-row">
+      <button class="cbtn red" data-end><span class="circle" data-icon="endCall"></span><small>End</small></button>
+    </div>
   </section>
 
+  <section class="screen call-screen" id="c-ended">
+    <div class="call-top">
+      <p class="call-small" id="cEndedText">Call ended</p>
+      <h1 class="call-name">Layla</h1>
+    </div>
+    <div class="spacer"></div>
+    <button class="wide-btn" id="btnNew">Back</button>
+  </section>
+
+  <div class="home-indicator"></div>
   <div id="toast" class="toast"></div>
 </main>
 

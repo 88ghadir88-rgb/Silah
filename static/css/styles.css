@@ -1,334 +1,334 @@
 /* ==========================================================================
    SignConnect styles
    --------------------------------------------------------------------------
-   STEP 1 OF MATCHING YOUR FIGMA DESIGN: change ONLY the values in :root below.
-   In Figma: select an element -> right panel "Inspect" (or Dev Mode) -> copy the
-   hex colour / font / corner radius and paste it here. Every screen uses these
-   variables, so the whole app updates at once.
+   Two separate UI layers:
+     .app-*   SignConnect APP UI (welcome/activation + settings/permissions)
+     .call-*  SignConnect CALL EXPERIENCE (our Figma call screens)
+   Plus .operator = demo controls OUTSIDE the phone (not part of the product).
+
+   To fine-tune against Figma: select a layer in Figma -> Inspect/Dev Mode -> copy the
+   value into the matching variable below.
    ========================================================================== */
 :root {
-  --color-primary: #0f766e;        /* main brand colour (buttons, highlights) */
-  --color-primary-dark: #115e59;
-  --color-primary-soft: #ccfbf1;
-  --color-accept: #16a34a;         /* answer-call button */
-  --color-decline: #dc2626;        /* decline / end-call button */
-  --color-demo: #c2410c;           /* DEMO MODE labels (keep clearly different!) */
-  --color-demo-soft: #ffedd5;
-  --color-typed: #6d28d9;          /* TYPED fallback labels */
-  --color-typed-soft: #ede9fe;
-  --color-live: #047857;           /* LIVE AI labels */
-  --color-live-soft: #d1fae5;
+  /* Figma call screen background: dark olive-grey top-left -> warm brown bottom-right */
+  --call-bg: linear-gradient(160deg, #2c2c29 0%, #35352f 38%, #4a3f33 72%, #6b4a33 100%);
+  --call-text: #ffffff;
+  --call-muted: rgba(255, 255, 255, .72);
+  --call-btn: rgba(255, 255, 255, .17);           /* round translucent buttons */
+  --call-btn-border: rgba(255, 255, 255, .22);
+  --call-card: rgba(255, 255, 255, .10);          /* text boxes / cards */
+  --call-card-border: rgba(255, 255, 255, .20);
+  --end-red: #e8322b;
+  --accept-green: #30c552;
+  --btn-size: 64px;
 
-  --color-bg: #eef2f6;             /* page background behind the phone */
-  --color-surface: #ffffff;        /* phone screen background */
-  --color-card: #f8fafc;
-  --color-dark: #0b1f2a;           /* incoming-call screen background */
-  --color-text: #0f172a;
-  --color-muted: #64748b;
-  --color-border: #e2e8f0;
+  /* App UI (light, iOS settings style) */
+  --app-bg: #f2f2f7;
+  --app-card: #ffffff;
+  --app-text: #111111;
+  --app-muted: #6e6e73;
+  --app-accent: #6b4a33;     /* warm brown taken from the call gradient */
+  --app-accent-2: #2c2c29;
+  --app-border: #e5e5ea;
 
-  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Arabic", Arial, sans-serif;
-  --radius-phone: 36px;
-  --radius-card: 18px;
-  --radius-button: 14px;
-  --caption-size: 1.55rem;         /* size of the live caption text Sara reads */
-  --phone-width: 420px;
+  --live: #0f8a5f;
+  --demo: #d9480f;
+  --typed: #6d28d9;
+
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, "Noto Sans Arabic", Arial, sans-serif;
+  --phone-w: 390px;
+  --phone-h: 844px;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
   font-family: var(--font);
-  background: var(--color-bg);
-  color: var(--color-text);
-  min-height: 100vh;
+  background: #1b1b1d;
+  color: #fff;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
-h1 { font-size: 1.6rem; margin: .4rem 0; }
-h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
-p { line-height: 1.45; }
-a { color: var(--color-primary); }
+button { font: inherit; cursor: pointer; }
 .hidden { display: none !important; }
-.muted { color: var(--color-muted); }
-.muted-light { color: #b6c8d4; }
-.small { font-size: .85rem; }
-.center { text-align: center; }
+[dir="auto"] { unicode-bidi: plaintext; }
 
-/* ---------- Honest prototype strip above the phone ---------- */
-.prototype-strip {
+/* ---------- Operator strip: demo controls OUTSIDE the phone ---------- */
+.operator {
   width: 100%;
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
   flex-wrap: wrap;
-  padding: 8px 16px;
+  gap: 8px 14px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
   background: #fff7ed;
-  border-bottom: 1px solid #fed7aa;
-  font-size: .8rem;
   color: #7c2d12;
+  font-size: .78rem;
+  border-bottom: 1px solid #fed7aa;
 }
-.net.ok { color: var(--color-live); }
-.net.bad { color: var(--color-decline); font-weight: 600; }
+.operator strong { color: #9a3412; }
+.operator .group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.op-btn {
+  border: 1px solid #fdba74; background: #fff; color: #9a3412; border-radius: 8px;
+  padding: 5px 9px; font-size: .76rem; font-weight: 600;
+}
+.op-btn.demo { border-style: dashed; border-color: var(--demo); color: var(--demo); background: #fff1e6; }
+.op-btn:disabled { opacity: .45; cursor: not-allowed; }
+.op-input { border: 1px solid #fdba74; border-radius: 8px; padding: 5px 8px; font-size: .78rem; min-width: 180px; }
+.net.ok { color: var(--live); }
+.net.bad { color: #b91c1c; font-weight: 700; }
 
 /* ---------- Phone frame ---------- */
 .phone {
   position: relative;
-  width: min(var(--phone-width), 100%);
-  height: min(860px, calc(100vh - 60px));
-  margin: 16px auto;
-  background: var(--color-surface);
-  border-radius: var(--radius-phone);
-  box-shadow: 0 20px 60px rgba(15, 23, 42, .18), 0 0 0 10px #111827;
-  overflow-y: auto;
-  overflow-x: hidden;
+  width: min(var(--phone-w), 100vw);
+  flex: 1 1 auto;               /* fill the space below the operator strip */
+  max-height: var(--phone-h);
+  min-height: 560px;
+  margin: 12px auto;
+  border-radius: 48px;
+  overflow: hidden;
+  box-shadow: 0 0 0 9px #0c0c0d, 0 0 0 11px #3a3a3c, 0 30px 70px rgba(0, 0, 0, .55);
+  background: var(--call-bg);
 }
-@media (max-width: 520px) {
-  .phone { margin: 0; border-radius: 0; box-shadow: none; height: calc(100vh - 40px); width: 100%; }
+@media (max-width: 480px) {
+  .phone { margin: 0; border-radius: 0; box-shadow: none; max-height: none; }
 }
-.phone-bar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 18px 10px;
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+.statusbar {
+  position: absolute; top: 0; left: 0; right: 0; height: 50px; z-index: 20;
+  display: flex; align-items: center; padding: 0 30px; pointer-events: none;
+  font-weight: 600; font-size: .95rem;
 }
-.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--color-primary); }
-.badge {
-  font-size: .7rem;
-  font-weight: 800;
-  letter-spacing: .05em;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
+.island {
+  position: absolute; left: 50%; top: 11px; transform: translateX(-50%);
+  width: 122px; height: 35px; border-radius: 20px; background: #000;
 }
-.badge.live { background: var(--color-live-soft); color: var(--color-live); border-color: transparent; }
-.badge.demo { background: var(--color-demo); color: #fff; border-color: transparent; }
+.island::after { /* orange "camera/mic in use" dot, as in the Figma */
+  content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px;
+  border-radius: 50%; background: #ff9f0a; transform: translate(-50%, -50%);
+}
+.home-indicator {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  width: 134px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .85); z-index: 20;
+}
+.screen { position: absolute; inset: 0; display: none; flex-direction: column; padding: 58px 22px 30px; }
+.screen.active { display: flex; }
+.screen > * { flex-shrink: 0; }            /* never squash content; scroll instead */
+.screen > .spacer { flex: 1 1 0; min-height: 0; flex-shrink: 1; }
+.call-screen { overflow-y: auto; }
 
-/* ---------- Screens ---------- */
-.screen { display: none; padding: 16px 18px 24px; min-height: calc(100% - 52px); }
-.screen.active { display: flex; flex-direction: column; gap: 14px; }
-.screen-dark { background: var(--color-dark); color: #fff; justify-content: space-between; }
-.step-label {
-  align-self: flex-start;
-  font-size: .72rem;
-  font-weight: 800;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--color-primary);
-  background: var(--color-primary-soft);
-  padding: 4px 10px;
-  border-radius: 999px;
+/* ==========================================================================
+   APP UI (SignConnect app: welcome/activation + settings/permissions)
+   ========================================================================== */
+.app-screen { background: var(--app-bg); color: var(--app-text); overflow-y: auto; }
+.phone.app-mode .statusbar { color: #000; }
+.phone.app-mode .island::after { display: none; }
+.phone.app-mode .home-indicator { background: #000; }
+.app-logo {
+  width: 92px; height: 92px; border-radius: 24px; margin: 40px auto 18px;
+  background: var(--call-bg); color: #fff; display: grid; place-items: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
 }
-.sim-tag {
-  align-self: center;
-  font-size: .7rem;
-  font-weight: 800;
-  letter-spacing: .1em;
-  color: #fde68a;
-  border: 1px dashed #fde68a;
-  padding: 4px 10px;
-  border-radius: 999px;
+.app-logo svg { width: 54px; height: 54px; }
+.app-screen h1 { text-align: center; font-size: 1.9rem; margin: 0 0 6px; }
+.app-sub { text-align: center; color: var(--app-muted); margin: 0 10px 22px; line-height: 1.45; }
+.app-features { list-style: none; padding: 0; margin: 0 0 22px; display: grid; gap: 10px; }
+.app-features li {
+  background: var(--app-card); border-radius: 14px; padding: 12px 14px;
+  display: flex; gap: 12px; align-items: center; font-size: .92rem; line-height: 1.35;
+}
+.app-features .fi { width: 34px; height: 34px; border-radius: 10px; background: #f4ece5; color: var(--app-accent); display: grid; place-items: center; flex: none; }
+.app-features .fi svg { width: 20px; height: 20px; }
+.app-btn {
+  width: 100%; border: none; border-radius: 14px; padding: 15px; font-size: 1.02rem; font-weight: 600;
+  background: var(--app-accent); color: #fff; margin-top: auto;
+}
+.app-btn.secondary { background: #fff; color: #c0362c; border: 1px solid var(--app-border); margin-top: 14px; }
+.app-note { font-size: .74rem; color: var(--app-muted); text-align: center; margin: 12px 4px 0; line-height: 1.4; }
+
+.app-header { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 14px; }
+.app-header h2 { margin: 0; font-size: 1.6rem; }
+.active-pill { font-size: .78rem; font-weight: 700; color: var(--live); background: #e3f6ee; padding: 5px 10px; border-radius: 999px; }
+.app-status {
+  background: var(--call-bg); color: #fff; border-radius: 16px; padding: 14px; font-size: .86rem; line-height: 1.4; margin-bottom: 18px;
+}
+.app-status b { display: block; font-size: 1rem; margin-bottom: 4px; }
+.section-title { font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; color: var(--app-muted); margin: 6px 14px 6px; }
+.list { background: var(--app-card); border-radius: 14px; overflow: hidden; margin-bottom: 18px; }
+.list-row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-bottom: 1px solid var(--app-border); }
+.list-row:last-child { border-bottom: none; }
+.list-row .li-icon { width: 30px; height: 30px; border-radius: 8px; background: #f4ece5; color: var(--app-accent); display: grid; place-items: center; flex: none; }
+.list-row .li-icon svg { width: 18px; height: 18px; }
+.list-row .li-text { flex: 1; font-size: .9rem; }
+.list-row .li-text small { display: block; color: var(--app-muted); font-size: .74rem; margin-top: 2px; line-height: 1.3; }
+.perm-state { font-size: .72rem; font-weight: 700; padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
+.perm-state.ok { background: #e3f6ee; color: var(--live); }
+.perm-state.sim { background: #fff1e6; color: var(--demo); }
+.perm-state.ask { background: var(--app-accent); color: #fff; border: none; }
+.perm-state.bad { background: #fde8e8; color: #b91c1c; }
+.list-row select, .list-row input {
+  font: inherit; font-size: .86rem; border: 1px solid var(--app-border); border-radius: 8px; padding: 6px 8px; background: #fafafa; max-width: 150px;
 }
 
-/* ---------- Cards, fields, buttons ---------- */
-.card {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  padding: 14px;
+/* ==========================================================================
+   CALL EXPERIENCE (our Figma call screens)
+   ========================================================================== */
+.call-screen { color: var(--call-text); background: var(--call-bg); text-align: center; }
+.call-top { margin-top: 26px; }
+.call-small { font-size: 1rem; color: var(--call-muted); margin: 0 0 6px; }
+.call-name { font-size: 1.85rem; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+.call-hint { font-size: .78rem; color: var(--call-muted); line-height: 1.6; margin: 18px 0 0; }
+.call-label { font-size: .66rem; color: var(--call-muted); margin: 0 0 12px; }
+.back-btn {
+  position: absolute; top: 60px; left: 16px; width: 36px; height: 36px; border: none; background: none;
+  color: #fff; padding: 6px; opacity: .85;
 }
-.field { display: flex; flex-direction: column; gap: 4px; font-size: .82rem; color: var(--color-muted); margin-bottom: 10px; }
-select, input, textarea {
-  font: inherit;
-  font-size: .95rem;
-  color: var(--color-text);
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--color-border);
-  background: #fff;
-  width: 100%;
-}
-.row { display: flex; gap: 8px; align-items: center; }
-.row > * { flex: 1; }
-.row.wrap { flex-wrap: wrap; }
-.btn {
-  font: inherit;
-  font-weight: 600;
-  font-size: .95rem;
-  padding: 11px 14px;
-  border-radius: var(--radius-button);
-  border: 1px solid var(--color-border);
-  background: #fff;
-  color: var(--color-text);
-  cursor: pointer;
-  text-align: center;
-}
-.btn:hover { filter: brightness(.97); }
-.btn:disabled { opacity: .5; cursor: not-allowed; }
-.btn.primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
-.btn.danger { background: var(--color-decline); border-color: var(--color-decline); color: #fff; }
-.btn.demo { background: var(--color-demo-soft); border: 2px dashed var(--color-demo); color: var(--color-demo); width: 100%; }
-.btn.link { background: none; border: none; color: var(--color-primary); }
-.btn.big { padding: 16px; font-size: 1.05rem; width: 100%; }
-.btn.small { padding: 6px 10px; font-size: .8rem; }
-.hint { font-size: .82rem; color: var(--color-muted); text-align: center; margin: -4px 0 0; }
-.warning { background: #fef2f2; color: #991b1b; border-radius: 10px; padding: 10px; font-size: .82rem; margin: 0; }
-.disclaimer { font-size: .75rem; color: var(--color-muted); border-left: 3px solid var(--color-demo); padding-left: 10px; }
+.back-btn svg { width: 22px; height: 22px; }
+.spacer { flex: 1; }
 
-/* ---------- Avatars ---------- */
-.avatar {
-  width: 44px; height: 44px; flex: none;
-  border-radius: 50%;
-  display: grid; place-items: center;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-weight: 800; font-size: 1.2rem;
+/* round iOS buttons */
+.controls { display: grid; grid-template-columns: repeat(3, var(--btn-size)); justify-content: center; gap: 14px 22px; margin-bottom: 18px; }
+.cbtn { display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: none; color: #fff; padding: 0; }
+.cbtn .circle {
+  width: var(--btn-size); height: var(--btn-size); border-radius: 50%;
+  background: var(--call-btn); border: 1px solid var(--call-btn-border);
+  display: grid; place-items: center; transition: background .15s;
 }
-.avatar.big { width: 76px; height: 76px; font-size: 2rem; margin: 0 auto; }
-.avatar.huge { width: 120px; height: 120px; font-size: 3.2rem; margin: 0 auto; background: rgba(255,255,255,.12); }
-.home-hero { text-align: center; padding: 8px 0; }
+.cbtn .circle svg { width: 27px; height: 27px; }
+.cbtn small { font-size: .66rem; color: #fff; }
+.cbtn.on .circle { background: #fff; color: #222; }
+.cbtn.red .circle { background: var(--end-red); border-color: var(--end-red); }
+.cbtn.green .circle { background: var(--accept-green); border-color: var(--accept-green); }
+.cbtn.mini .circle { width: 40px; height: 40px; }
+.cbtn.mini .circle svg { width: 20px; height: 20px; }
+.cbtn.big .circle { width: 72px; height: 72px; }
+.end-row { display: flex; justify-content: center; gap: 48px; margin-bottom: 14px; }
 
-/* ---------- Incoming call ---------- */
-.incoming { text-align: center; margin-top: 40px; }
-.ring-flash { display: inline-block; border-radius: 50%; animation: ring 1.2s infinite; }
-@keyframes ring {
-  0% { box-shadow: 0 0 0 0 rgba(45, 212, 191, .7); }
-  100% { box-shadow: 0 0 0 40px rgba(45, 212, 191, 0); }
-}
-.connected-pulse { animation: ring 2.4s infinite; }
-.call-actions { display: flex; justify-content: space-around; padding-bottom: 30px; }
-.call-actions.single { justify-content: center; }
-.round {
-  width: 76px; height: 76px; border-radius: 50%; border: none;
-  font-size: 1.8rem; color: #fff; cursor: pointer; position: relative;
-}
-.round span { position: absolute; top: 86px; left: 50%; transform: translateX(-50%); font-size: .8rem; color: #cbd5e1; }
-.round.accept { background: var(--color-accept); }
-.round.decline { background: var(--color-decline); }
-.timer { font-variant-numeric: tabular-nums; color: var(--color-muted); font-size: .9rem; }
-.screen-dark .timer { color: #e2e8f0; font-size: 1.4rem; }
+/* Step 2: incoming */
+.incoming-extra { display: flex; justify-content: space-between; padding: 0 22px; margin-bottom: 26px; }
+.incoming-main { display: flex; justify-content: space-between; padding: 0 12px; margin-bottom: 22px; }
+.ringing .call-name { animation: ringPulse 1.6s ease-in-out infinite; }
+@keyframes ringPulse { 50% { opacity: .65; } }
 
-/* ---------- In-call screens ---------- */
-.call-head { display: flex; align-items: center; gap: 10px; }
-.call-head > div:nth-child(2) { flex: 1; }
-.mic-status { font-size: .8rem; color: var(--color-muted); display: flex; align-items: center; gap: 6px; }
-.dot { width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; display: inline-block; flex: none; }
-.dot.ok { background: var(--color-accept); }
-.dot.bad { background: var(--color-decline); }
-.dot.demo { background: var(--color-demo); }
-.dot.pulse { animation: pulse 1s infinite alternate; }
-@keyframes pulse { to { opacity: .3; } }
+/* Step 3: SignConnect pill */
+.sc-pill {
+  margin: 0 auto 26px; display: inline-flex; align-items: center; gap: 8px;
+  background: var(--call-card); border: 1px solid var(--call-card-border); color: #fff;
+  border-radius: 12px; padding: 9px 14px; font-weight: 700; font-size: .86rem;
+}
+.sc-pill .ic { width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,.18); display: grid; place-items: center; }
+.sc-pill .ic svg { width: 18px; height: 18px; }
 
-.live-caption {
-  background: var(--color-dark);
-  color: #fff;
-  border-radius: var(--radius-card);
-  padding: 16px;
-  min-height: 150px;
+/* text boxes (Step 4, 5, 7) */
+.call-card {
+  background: var(--call-card); border: 1px solid var(--call-card-border); border-radius: 10px;
+  padding: 16px 14px; margin: 0 auto; width: 100%; max-width: 300px;
 }
-.caption-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--color-muted); margin-bottom: 6px; }
-.live-caption .caption-label { color: #7dd3c0; }
-.caption-main { font-size: var(--caption-size); font-weight: 600; line-height: 1.35; }
-.caption-interim { font-size: 1.1rem; color: #94a3b8; margin-top: 8px; font-style: italic; }
-.caller-phone .caption-interim { color: #e2e8f0; font-style: normal; }
-.caller-strip {
-  font-size: .9rem; background: var(--color-dark); color: #fff;
-  border-radius: 12px; padding: 8px 12px; max-height: 70px; overflow: auto;
-}
-.caller-strip span:first-child { color: #7dd3c0; font-weight: 700; }
-
-.transcript { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
-#screen-summary .transcript { max-height: none; }
-.bubble { padding: 10px 12px; border-radius: 14px; max-width: 88%; font-size: .92rem; }
-.bubble.caller { background: var(--color-card); border: 1px solid var(--color-border); align-self: flex-start; }
-.bubble.user { background: var(--color-primary-soft); align-self: flex-end; }
-.who { font-size: .7rem; font-weight: 700; color: var(--color-muted); margin-bottom: 4px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.signs-used { font-size: .72rem; color: var(--color-muted); margin-top: 4px; }
-.tag { font-size: .62rem; font-weight: 800; letter-spacing: .04em; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
-.tag.live { background: var(--color-live-soft); color: var(--color-live); }
-.tag.demo { background: var(--color-demo); color: #fff; }
-.tag.typed { background: var(--color-typed-soft); color: var(--color-typed); }
-.source-tag { margin-top: 10px; }
-.bottom-actions { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
-.bottom-actions.row { flex-direction: row; }
-
-/* ---------- Camera ---------- */
-.camera-slot:empty { display: none; }
-.camera-rig { display: none; position: relative; width: 100%; aspect-ratio: 4 / 3; background: #000; border-radius: var(--radius-card); overflow: hidden; }
-.camera-rig.on { display: block; }
-.camera-rig video, .camera-rig canvas {
-  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
-  transform: scaleX(-1); /* mirror, like a selfie camera */
-}
-.hud {
-  position: absolute; left: 0; right: 0; bottom: 0;
-  padding: 8px 10px; background: linear-gradient(transparent, rgba(0,0,0,.75));
-  color: #fff; display: flex; flex-direction: column; gap: 4px;
-}
-.hud-sign { font-size: 1.3rem; font-weight: 800; }
-.hud-stats { font-size: .65rem; color: #cbd5e1; }
-.hold { height: 6px; background: rgba(255,255,255,.25); border-radius: 3px; overflow: hidden; }
-.hold > div { height: 100%; width: 0; background: #2dd4bf; transition: width .08s linear; }
-.camera-message {
-  position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
-  padding: 20px; color: #fff; background: rgba(0,0,0,.6); font-size: .9rem;
-}
-.draft { min-height: 64px; }
-.chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.chips.center { justify-content: center; margin-bottom: 14px; }
-.chip { background: var(--color-primary); color: #fff; font-weight: 700; padding: 6px 12px; border-radius: 999px; }
-.chip.demo { background: var(--color-demo); }
-.chip small { opacity: .8; font-weight: 500; }
-.review-text { font-size: 1.5rem; font-weight: 700; line-height: 1.35; }
-
-/* ---------- Text -> speech ---------- */
-.speaking { text-align: center; margin-top: 40px; display: flex; flex-direction: column; gap: 14px; }
-.wave { display: flex; gap: 6px; justify-content: center; align-items: center; height: 70px; }
-.wave i { width: 8px; height: 20%; background: var(--color-primary); border-radius: 4px; }
-.playing .wave i, .speaking-bar .wave i { animation: wave 0.9s infinite ease-in-out; }
-.wave i:nth-child(2) { animation-delay: .1s; } .wave i:nth-child(3) { animation-delay: .2s; }
-.wave i:nth-child(4) { animation-delay: .3s; } .wave i:nth-child(5) { animation-delay: .4s; }
-.wave i:nth-child(6) { animation-delay: .5s; } .wave i:nth-child(7) { animation-delay: .6s; }
+.speech-box { min-height: 74px; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+.speech-text { font-size: 1.05rem; line-height: 1.5; }
+.speech-old { font-size: .78rem; color: var(--call-muted); line-height: 1.4; }
+.speech-wait { font-size: .82rem; color: var(--call-muted); }
+.deaf-card { display: flex; align-items: center; gap: 12px; text-align: left; max-width: 230px; padding: 12px; }
+.deaf-card .ic { width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,.18); display: grid; place-items: center; flex: none; }
+.deaf-card .ic svg { width: 20px; height: 20px; }
+.deaf-card b { display: block; font-size: .82rem; }
+.deaf-card span { font-size: .74rem; color: var(--call-muted); }
+.reply-text { font-size: 1.15rem; font-weight: 600; margin-bottom: 10px; line-height: 1.45; }
+.chip-src { display: inline-block; font-size: .62rem; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,.18); margin-bottom: 10px; }
+.chip-src.demo { background: var(--demo); }
+.chip-src.typed { background: var(--typed); }
+.waveform { display: flex; gap: 3px; justify-content: center; align-items: center; height: 24px; }
+.waveform i { width: 2px; height: 30%; background: #fff; border-radius: 1px; opacity: .85; }
+.waveform.playing i { animation: wave .8s ease-in-out infinite; }
+.waveform i:nth-child(odd) { animation-delay: .15s; } .waveform i:nth-child(3n) { animation-delay: .3s; }
+.waveform i:nth-child(4n) { animation-delay: .45s; }
 @keyframes wave { 50% { height: 100%; } }
-.wave.small { height: 26px; gap: 3px; }
-.wave.small i { width: 4px; }
-.speaking-bar { display: flex; align-items: center; gap: 10px; background: var(--color-primary-soft); padding: 10px; border-radius: 12px; }
+.src-line { font-size: .62rem; color: var(--call-muted); margin-top: 8px; }
+.tiny { font-size: .68rem; color: var(--call-muted); line-height: 1.4; }
 
-/* ---------- Summary ---------- */
-.metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.metric { background: var(--color-card); border: 1px solid var(--color-border); border-radius: 14px; padding: 10px; }
-.metric .value { font-size: 1.15rem; font-weight: 800; }
-.metric .label { font-size: .72rem; color: var(--color-muted); }
-.na { font-size: .8rem; font-weight: 500; color: var(--color-muted); }
-
-/* ---------- Train / test ---------- */
-.tool-head { display: flex; align-items: center; gap: 10px; }
-.tool-head h2 { margin: 0; }
-.live-pred { font-weight: 700; text-align: center; }
-.train-list { display: flex; flex-direction: column; gap: 8px; }
-.train-row { display: flex; gap: 10px; justify-content: space-between; background: var(--color-card); border: 1px solid var(--color-border); border-radius: 14px; padding: 10px; }
-.train-actions { display: flex; flex-direction: column; gap: 4px; align-items: stretch; min-width: 118px; }
-.count { font-size: .75rem; text-align: center; color: var(--color-decline); font-weight: 700; }
-.count.ok { color: var(--color-live); }
-.eval-prompt { font-size: 1.4rem; text-align: center; padding: 10px; background: var(--color-card); border-radius: 14px; }
-.eval-prompt small { font-size: .8rem; color: var(--color-muted); }
-.table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-.table th, .table td { text-align: left; padding: 6px; border-bottom: 1px solid var(--color-border); }
-
-/* ---------- Dialog & toast ---------- */
-dialog { border: none; border-radius: var(--radius-card); padding: 18px; width: min(380px, 92vw); }
-dialog::backdrop { background: rgba(15, 23, 42, .5); }
-dialog textarea { margin: 8px 0 12px; }
-.toast {
-  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(150%);
-  background: #0f172a; color: #fff; padding: 12px 16px; border-radius: 12px; font-size: .9rem;
-  max-width: 90vw; transition: transform .25s, opacity .25s; z-index: 50; opacity: 0; pointer-events: none;
+/* Step 6: sign camera */
+.cam-card {
+  position: relative; width: 100%; max-width: 300px; aspect-ratio: 300 / 250; margin: 10px auto 10px;
+  border-radius: 12px; overflow: hidden; background: #111; border: 1px solid var(--call-card-border);
 }
-.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+.cam-card canvas { width: 100%; height: 100%; display: block; }
+.ai-badge {
+  position: absolute; top: 8px; left: 8px; display: flex; align-items: center; gap: 5px;
+  font-size: .6rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: rgba(0,0,0,.55);
+}
+.ai-badge::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #30c552; }
+.ai-badge.rec::after { background: #ff453a; animation: blink .8s infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+.cam-msg { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; font-size: .78rem; background: rgba(0,0,0,.6); }
+.cam-stats { position: absolute; bottom: 6px; right: 8px; font-size: .55rem; color: rgba(255,255,255,.75); }
+.sign-pill {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0 auto 4px; max-width: 300px;
+  background: var(--call-card); border: 1px solid var(--call-card-border); border-radius: 10px;
+  padding: 9px 12px; font-size: .95rem; min-height: 40px;
+}
+.sign-pill .pill-text { flex: 1; }
+.sign-pill.muted .pill-text { color: var(--call-muted); font-size: .8rem; }
+.pill-act { width: 30px; height: 30px; border-radius: 50%; border: none; display: grid; place-items: center; padding: 6px; color: #fff; background: rgba(255,255,255,.18); }
+.pill-act.send { background: var(--accept-green); }
+.pill-act svg { width: 18px; height: 18px; }
+.sign-detail { font-size: .62rem; color: var(--call-muted); min-height: 1em; margin-bottom: 4px; }
+.caller-line { font-size: .7rem; color: var(--call-muted); margin: 6px 12px 0; max-height: 2.6em; overflow: hidden; }
+
+/* Summary */
+.summary { overflow-y: auto; text-align: left; }
+.summary .call-top { text-align: center; }
+.sum-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 16px 0; }
+.sum-tile { background: var(--call-card); border: 1px solid var(--call-card-border); border-radius: 10px; padding: 9px; }
+.sum-tile b { display: block; font-size: 1rem; }
+.sum-tile span { font-size: .64rem; color: var(--call-muted); }
+.sum-tile .na { font-size: .72rem; font-weight: 400; color: var(--call-muted); }
+.sum-h { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--call-muted); margin: 14px 0 6px; }
+.bubble { background: var(--call-card); border: 1px solid var(--call-card-border); border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; font-size: .84rem; }
+.bubble.user { background: rgba(255,255,255,.2); }
+.bubble .who { font-size: .62rem; color: var(--call-muted); margin-bottom: 3px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.honesty { font-size: .7rem; color: var(--call-muted); line-height: 1.45; padding-left: 16px; margin: 0; }
+.wide-btn { width: 100%; border: 1px solid var(--call-card-border); background: var(--call-btn); color: #fff; border-radius: 14px; padding: 13px; font-weight: 600; margin-top: 14px; }
+
+/* tags */
+.tag { font-size: .56rem; font-weight: 800; letter-spacing: .03em; padding: 2px 6px; border-radius: 999px; white-space: nowrap; }
+.tag.live { background: #d1fae5; color: #065f46; }
+.tag.demo { background: var(--demo); color: #fff; }
+.tag.typed { background: #ede9fe; color: var(--typed); }
+.mode-flag {
+  position: absolute; top: 50px; right: 14px; z-index: 15; font-size: .55rem; font-weight: 800; letter-spacing: .05em;
+  padding: 3px 7px; border-radius: 999px; background: var(--demo); color: #fff;
+}
+
+/* toast */
+.toast {
+  position: absolute; left: 50%; bottom: 40px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+  background: rgba(0,0,0,.82); color: #fff; padding: 10px 14px; border-radius: 12px; font-size: .8rem;
+  width: max-content; max-width: 86%; text-align: center; transition: all .25s; z-index: 40;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ==========================================================================
+   Stage page (both phones side by side) and Lab page
+   ========================================================================== */
+.stage { display: flex; gap: 18px; justify-content: center; align-items: flex-start; flex-wrap: wrap; width: 100%; padding: 8px; }
+.stage figure { margin: 0; text-align: center; }
+.stage figcaption { font-size: .8rem; color: #bbb; margin-bottom: 4px; }
+.stage { flex: 1; min-height: 0; }
+.stage figure { height: 100%; display: flex; flex-direction: column; }
+.stage iframe { width: 430px; flex: 1; min-height: 640px; max-height: 1000px; border: none; border-radius: 12px; background: #1b1b1d; }
+.lab { width: min(980px, 100%); padding: 16px; color: #eee; }
+.lab h1 { font-size: 1.4rem; }
+.lab .panel { background: #2a2a2d; border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+.lab .cols { display: grid; grid-template-columns: 360px 1fr; gap: 14px; }
+@media (max-width: 800px) { .lab .cols { grid-template-columns: 1fr; } }
+.lab table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.lab td, .lab th { text-align: left; padding: 5px; border-bottom: 1px solid #3a3a3d; }
+.lab .bar { height: 8px; background: #5eead4; border-radius: 4px; }
+.lab button, .lab select, .lab input { font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid #444; background: #3a3a3d; color: #fff; }
+.lab button.primary { background: #0f8a5f; border-color: #0f8a5f; }
+.lab .prompt { font-size: 1.6rem; text-align: center; padding: 12px; }
+.lab .muted { color: #aaa; font-size: .82rem; }
+.lab .cam-card { max-width: 360px; aspect-ratio: 3 / 4; }

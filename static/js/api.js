@@ -6,8 +6,8 @@
 
 export class Api {
   constructor(room, role) {
-    this.room = encodeURIComponent(room || "sara");
-    this.role = role;               // "user" (Sara) or "caller"
+    this.room = encodeURIComponent(room || "layla");
+    this.role = role;               // "user" (Layla, the Deaf user) or "caller"
     this.offset = 0;                // serverClock - localClock, in ms
     this.bestRtt = Infinity;
     this.lastSeq = 0;
@@ -57,7 +57,6 @@ export class Api {
   health() { return this.request("GET", "/api/health"); }
   state(since = 0) { return this.request("GET", this.roomPath(`?since=${since}&role=${this.role}`)); }
   ring(options) { return this.request("POST", this.roomPath("/ring"), options); }
-  answer() { return this.request("POST", this.roomPath("/answer"), {}); }
   decline() { return this.request("POST", this.roomPath("/decline"), {}); }
   end() { return this.request("POST", this.roomPath("/end"), {}); }
   summary() { return this.request("GET", this.roomPath("/summary")); }
@@ -76,6 +75,10 @@ export class Api {
   }
 
   saveEvaluation(evaluation) { return this.request("POST", "/api/evaluations", evaluation); }
+  model() { return this.request("GET", "/api/model"); }
+  // Sends one signed sequence (landmark numbers only) to the ASL model on the backend.
+  recognize(frames) { return this.request("POST", "/api/recognize", { frames }); }
+  answer(mode) { return this.request("POST", this.roomPath("/answer"), mode ? { mode } : {}); }
 
   // Calls onUpdate({room, messages}) every intervalMs. Calls onConnection(true/false)
   // when the connection to the server is lost or comes back.

@@ -1,384 +1,233 @@
-// SignConnect - sign recognition, running 100% inside the browser.
+// SignConnect - webcam capture for sign recognition (runs in the browser).
 //
-// Step 1  Google MediaPipe Hand Landmarker (PRE-TRAINED model, Apache-2.0 license) finds the
-//         hand in each webcam frame and returns 21 points (landmarks) on the hand.
-//         Files are stored locally in static/vendor/mediapipe so it works on bad Wi-Fi.
-// Step 2  We turn the 21 points into 63 numbers that describe the HANDSHAPE
-//         (position-independent and size-independent).
-// Step 3  A k-Nearest-Neighbours classifier compares those numbers with example samples that
-//         your team recorded on the Train screen, and votes for the closest sign.
-// Step 4  A stabilizer only accepts a sign after it was held steadily for ~0.7 seconds.
+// Step 1  Google MediaPipe Holistic Landmarker (pre-trained, Apache-2.0) finds the face, body
+//         and both hands in each webcam frame. Files are in static/vendor/mediapipe (offline).
+// Step 2  "Segmentation": a sign starts when a hand appears and ends when the hands go down
+//         (no hand visible for 0.5 s) or after 4 seconds.
+// Step 3  The landmarks of that sign (lips, both hands, arms - only numbers, no video) are sent
+//         to the backend, where the PRE-TRAINED ASL MODEL classifies the sign (recognizer.py).
 //
-// The video never leaves the laptop. No GPU is required (it runs on the CPU if needed).
+// IMPORTANT: drawing the hand on screen is only DETECTION. The sign label always comes from
+// the ASL model's answer at POST /api/recognize - never from this file.
 
-import { FilesetResolver, HandLandmarker } from "../vendor/mediapipe/vision_bundle.mjs";
-import { RECOGNITION } from "./config.js";
+import { FilesetResolver, HolisticLandmarker } from "../vendor/mediapipe/vision_bundle.mjs";
 
 const VENDOR = new URL("../vendor/mediapipe/", import.meta.url).href;
-const MODEL_STORAGE_KEY = "signconnect.signModel.v1";
-const FEATURE_VERSION = "mediapipe-hand-21x3-wrist-scaled-v1";
 
-// Pairs of landmark numbers to draw lines between (thumb, fingers, palm).
-const CONNECTIONS = [
-  [0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11],
-  [11, 12], [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17],
+// The 40 lip points the ASL model uses (MediaPipe face-mesh numbering).
+const LIPS = [
+  61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 146, 91, 181, 84, 17, 314, 405, 321, 375,
+  78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308,
+];
+const POSE = [13, 14, 15, 16, 17, 18, 19, 20, 21, 22]; // elbows, wrists, finger points
+const HAND_LINKS = [
+  [0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
+  [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17],
 ];
 
-// ---------------------------------------------------------------------------
-// HandTracker: webcam + MediaPipe
-// ---------------------------------------------------------------------------
-export class HandTracker {
-  constructor() {
+const SEGMENT = {
+  prerollFrames: 6,      // keep a few frames from just before the hand appeared
+  endAfterNoHandMs: 500, // hands down for 0.5 s = sign finished
+  maxMs: 4000,           // never record longer than 4 s
+  minHandFrames: 8,      // shorter recordings are ignored
+};
+
+const round = (v) => Math.round(v * 10000) / 10000;
+const xy = (points, indices) => (indices ? indices.map((i) => points[i]) : points).flatMap((p) => [round(p.x), round(p.y)]);
+
+export class SignCapture {
+  // handlers: onSequence({frames, captureMs, handFrames}), onState(state), onFrame(info)
+  constructor(handlers = {}) {
+    this.handlers = handlers;
     this.landmarker = null;
     this.stream = null;
-    this.video = null;
-    this.canvas = null;
+    this.video = document.createElement("video");
+    this.video.muted = true;
+    this.video.playsInline = true;
+    this.proc = document.createElement("canvas"); // portrait crop that the model sees
+    this.display = null;
     this.running = false;
-    this.listeners = new Set();
-    this.inferenceMs = 0;   // moving average of the time the model needs per frame
+    this.paused = false;       // true while a sign is being recognized / sent
+    this.landmarkMs = 0;       // moving average: time MediaPipe needs per frame
     this.fps = 0;
     this.delegate = "";
-    this.lastVideoTime = -1;
+    this.reset();
   }
 
-  async loadModel() {
+  reset() {
+    this.preroll = [];
+    this.recording = null;   // {frames, startedAt, lastHandAt, handFrames}
+    this.needRelease = false; // after a 4 s cut-off, wait until the hands go down
+  }
+
+  async load() {
     if (this.landmarker) return;
     const fileset = await FilesetResolver.forVisionTasks(VENDOR + "wasm");
     const options = (delegate) => ({
-      baseOptions: { modelAssetPath: VENDOR + "hand_landmarker.task", delegate },
+      baseOptions: { modelAssetPath: VENDOR + "holistic_landmarker.task", delegate },
       runningMode: "VIDEO",
-      numHands: 1,
-      minHandDetectionConfidence: 0.5,
-      minHandPresenceConfidence: 0.5,
-      minTrackingConfidence: 0.5,
     });
-    // Default = CPU: predictable on every laptop, no GPU needed.
-    // Add ?gpu=1 to the page address to try the graphics chip (can be faster, sometimes buggy).
-    const tryGpu = new URLSearchParams(location.search).get("gpu") === "1";
-    if (tryGpu) {
+    // Default = CPU (works on every laptop). Add ?gpu=1 to the address to try the graphics chip.
+    if (new URLSearchParams(location.search).get("gpu") === "1") {
       try {
-        this.landmarker = await HandLandmarker.createFromOptions(fileset, options("GPU"));
-        this.delegate = "GPU (WebGL)";
+        this.landmarker = await HolisticLandmarker.createFromOptions(fileset, options("GPU"));
+        this.delegate = "GPU";
         return;
       } catch (error) {
-        console.warn("GPU delegate failed, using CPU instead", error);
+        console.warn("GPU failed, using CPU", error);
       }
     }
-    this.landmarker = await HandLandmarker.createFromOptions(fileset, options("CPU"));
+    this.landmarker = await HolisticLandmarker.createFromOptions(fileset, options("CPU"));
     this.delegate = "CPU";
   }
 
-  // Starts the webcam and the detection loop. video/canvas are HTML elements on the page.
-  async start(video, canvas) {
-    this.video = video;
-    this.canvas = canvas;
-    await this.loadModel();
+  async start(displayCanvas) {
+    this.display = displayCanvas;
+    await this.load();
     if (!this.stream) {
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("This browser cannot access the camera. Use Chrome, and open the page via http://localhost or https://");
+        throw new Error("This browser cannot use the camera. Use Chrome on http://localhost or https://");
       }
       this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
-        audio: false,
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, audio: false,
       });
+      this.video.srcObject = this.stream;
+      await this.video.play();
     }
-    video.srcObject = this.stream;
-    video.muted = true;
-    video.playsInline = true;
-    await video.play();
+    this.reset();
+    this.paused = false;
     if (!this.running) {
       this.running = true;
+      this.lastVideoTime = -1;
       this.loop();
     }
   }
 
   stop() {
     this.running = false;
-    this.stream?.getTracks().forEach((track) => track.stop());
+    this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
-    if (this.video) this.video.srcObject = null;
-    this.clearCanvas();
+    this.reset();
   }
 
-  onFrame(listener) {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+  setPaused(paused) {
+    this.paused = paused;
+    if (paused) this.reset();
   }
 
   loop() {
     if (!this.running) return;
-    const video = this.video;
-    if (video && video.readyState >= 2 && video.currentTime !== this.lastVideoTime) {
-      this.lastVideoTime = video.currentTime;
-      const t0 = performance.now();
-      const result = this.landmarker.detectForVideo(video, t0);
-      const t1 = performance.now();
-      this.inferenceMs = this.inferenceMs ? this.inferenceMs * 0.9 + (t1 - t0) * 0.1 : t1 - t0;
-      if (this.lastFrameAt) {
-        const fps = 1000 / (t1 - this.lastFrameAt);
-        this.fps = this.fps ? this.fps * 0.9 + fps * 0.1 : fps;
-      }
-      this.lastFrameAt = t1;
-
-      const landmarks = result.landmarks?.[0] || null;
-      const handedness = result.handedness?.[0]?.[0]?.categoryName || "Right";
-      this.draw(landmarks);
-      const frame = {
-        time: t1,
-        landmarks,
-        handedness,
-        features: landmarks ? toFeatures(landmarks) : null,
-      };
-      for (const listener of this.listeners) listener(frame);
+    const v = this.video;
+    if (v.readyState >= 2 && v.currentTime !== this.lastVideoTime) {
+      this.lastVideoTime = v.currentTime;
+      this.processFrame();
     }
     requestAnimationFrame(() => this.loop());
   }
 
-  clearCanvas() {
-    if (!this.canvas) return;
-    this.canvas.getContext("2d").clearRect(0, 0, this.canvas.width, this.canvas.height);
+  processFrame() {
+    // The ASL model was trained on phone videos (portrait). Crop the middle of the webcam
+    // image to portrait 3:4 so the person's position looks similar to the training data.
+    const v = this.video;
+    const h = v.videoHeight;
+    const w = Math.min(v.videoWidth, Math.round((h * 3) / 4));
+    const sx = Math.round((v.videoWidth - w) / 2);
+    if (this.proc.width !== w) { this.proc.width = w; this.proc.height = h; }
+    this.proc.getContext("2d").drawImage(v, sx, 0, w, h, 0, 0, w, h);
+
+    const t0 = performance.now();
+    const result = this.landmarker.detectForVideo(this.proc, t0);
+    const t1 = performance.now();
+    this.landmarkMs = this.landmarkMs ? this.landmarkMs * 0.9 + (t1 - t0) * 0.1 : t1 - t0;
+    if (this.lastFrameAt) this.fps = this.fps ? this.fps * 0.9 + (1000 / (t1 - this.lastFrameAt)) * 0.1 : 1000 / (t1 - this.lastFrameAt);
+    this.lastFrameAt = t1;
+
+    const left = result.leftHandLandmarks?.[0] || null;
+    const right = result.rightHandLandmarks?.[0] || null;
+    const face = result.faceLandmarks?.[0] || null;
+    const pose = result.poseLandmarks?.[0] || null;
+    const hasHand = Boolean(left || right);
+    const frame = {
+      lips: face ? xy(face, LIPS) : null,
+      left: left ? xy(left) : null,
+      right: right ? xy(right) : null,
+      pose: pose ? xy(pose, POSE) : null,
+    };
+
+    this.draw([left, right].filter(Boolean));
+    this.segment(frame, hasHand, t1);
+    this.handlers.onFrame?.({ hasHand, recording: Boolean(this.recording), fps: this.fps, landmarkMs: this.landmarkMs });
   }
 
-  draw(landmarks) {
-    const canvas = this.canvas;
-    if (!canvas) return;
-    const width = this.video.videoWidth || 640;
-    const height = this.video.videoHeight || 480;
-    if (canvas.width !== width) canvas.width = width;
-    if (canvas.height !== height) canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, width, height);
-    if (!landmarks) return;
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "rgba(255,255,255,0.85)";
-    for (const [a, b] of CONNECTIONS) {
-      ctx.beginPath();
-      ctx.moveTo(landmarks[a].x * width, landmarks[a].y * height);
-      ctx.lineTo(landmarks[b].x * width, landmarks[b].y * height);
-      ctx.stroke();
-    }
-    ctx.fillStyle = "#14b8a6";
-    for (const point of landmarks) {
-      ctx.beginPath();
-      ctx.arc(point.x * width, point.y * height, 5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-}
-
-// 21 landmarks -> 63 numbers. Wrist = origin, divided by the palm size, so the numbers describe
-// the SHAPE of the hand, not where it is or how close it is to the camera.
-// (We deliberately do not mirror left hands: MediaPipe's left/right guess can flicker, which
-// would make the numbers jump. A left-handed signer simply records their own samples.)
-export function toFeatures(landmarks) {
-  const wrist = landmarks[0];
-  const middleBase = landmarks[9];
-  const scale = Math.hypot(middleBase.x - wrist.x, middleBase.y - wrist.y, middleBase.z - wrist.z) || 1;
-  const features = [];
-  for (const point of landmarks) {
-    features.push((point.x - wrist.x) / scale);
-    features.push((point.y - wrist.y) / scale);
-    features.push((point.z - wrist.z) / scale);
-  }
-  return features;
-}
-
-function distance(a, b) {
-  let sum = 0;
-  for (let i = 0; i < a.length; i++) {
-    const d = a[i] - b[i];
-    sum += d * d;
-  }
-  return Math.sqrt(sum);
-}
-
-// ---------------------------------------------------------------------------
-// SignClassifier: k-Nearest-Neighbours on handshape features
-// ---------------------------------------------------------------------------
-export class SignClassifier {
-  constructor() {
-    this.samples = {};       // signId -> array of feature arrays
-    this.rejectDistance = Infinity;
-    this.source = "empty";   // where the model came from: "browser", "bundled file", "imported file"
-  }
-
-  count(signId) {
-    return this.samples[signId]?.length || 0;
-  }
-
-  totalSamples() {
-    return Object.values(this.samples).reduce((sum, list) => sum + list.length, 0);
-  }
-
-  trainedSigns() {
-    return Object.keys(this.samples).filter((id) => this.samples[id].length > 0);
-  }
-
-  isReady() {
-    return this.trainedSigns().length >= 2;
-  }
-
-  addSample(signId, features) {
-    (this.samples[signId] ||= []).push(features.map((v) => Math.round(v * 10000) / 10000));
-  }
-
-  clear(signId) {
-    if (signId) delete this.samples[signId];
-    else this.samples = {};
-    this.prepare();
-  }
-
-  // Works out how far away a hand may be from all samples before we say "not a known sign".
-  prepare() {
-    const all = [];
-    for (const [label, list] of Object.entries(this.samples)) for (const f of list) all.push({ label, f });
-    const nearest = [];
-    for (let i = 0; i < all.length; i++) {
-      let best = Infinity;
-      for (let j = 0; j < all.length; j++) {
-        if (i !== j && all[i].label === all[j].label) best = Math.min(best, distance(all[i].f, all[j].f));
-      }
-      if (best < Infinity) nearest.push(best);
-    }
-    if (nearest.length < 5) {
-      this.rejectDistance = Infinity;
+  segment(frame, hasHand, now) {
+    if (this.paused) return;
+    if (this.needRelease) {
+      if (!hasHand) this.needRelease = false;
       return;
     }
-    nearest.sort((a, b) => a - b);
-    const p95 = nearest[Math.floor(nearest.length * 0.95)];
-    this.rejectDistance = Math.max(p95 * RECOGNITION.rejectFactor, 0.15);
-  }
-
-  // Returns { label, confidence, distance } or null when no sign is recognized.
-  predict(features) {
-    if (!features || !this.isReady()) return null;
-    const neighbours = [];
-    for (const [label, list] of Object.entries(this.samples)) {
-      for (const f of list) neighbours.push({ label, d: distance(features, f) });
-    }
-    neighbours.sort((a, b) => a.d - b.d);
-    const top = neighbours.slice(0, RECOGNITION.k);
-    const votes = {};
-    for (const n of top) votes[n.label] = (votes[n.label] || 0) + 1;
-    const [label, count] = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
-    const closest = top.find((n) => n.label === label).d;
-    const confidence = count / top.length;
-    if (closest > this.rejectDistance) return { label: null, confidence: 0, distance: closest };
-    return { label, confidence, distance: closest };
-  }
-
-  toJSON() {
-    return {
-      format: "signconnect-sign-model",
-      feature: FEATURE_VERSION,
-      created_at: new Date().toISOString(),
-      samples: this.samples,
-    };
-  }
-
-  load(data, source) {
-    if (!data || data.format !== "signconnect-sign-model" || typeof data.samples !== "object") {
-      throw new Error("This file is not a SignConnect sign model.");
-    }
-    if (data.feature !== FEATURE_VERSION) throw new Error("This sign model was made with a different app version.");
-    this.samples = {};
-    for (const [label, list] of Object.entries(data.samples)) {
-      if (Array.isArray(list)) this.samples[label] = list.filter((f) => Array.isArray(f) && f.length === 63);
-    }
-    this.source = source;
-    this.prepare();
-  }
-
-  saveToBrowser() {
-    try {
-      localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(this.toJSON()));
-      this.source = "this browser";
-    } catch (e) {
-      console.warn("Could not save the sign model in this browser", e);
-    }
-  }
-
-  // Load order: 1) samples saved in this browser, 2) static/models/sign_model.json in the repo.
-  async loadBest() {
-    try {
-      const saved = localStorage.getItem(MODEL_STORAGE_KEY);
-      if (saved) {
-        this.load(JSON.parse(saved), "this browser");
-        if (this.totalSamples() > 0) return;
+    if (!this.recording) {
+      this.preroll.push(frame);
+      if (this.preroll.length > SEGMENT.prerollFrames) this.preroll.shift();
+      if (hasHand) {
+        this.recording = { frames: [...this.preroll], startedAt: now, lastHandAt: now, handFrames: 1 };
+        this.preroll = [];
+        this.handlers.onState?.("recording");
       }
-    } catch (e) {
-      console.warn("Saved sign model is broken, ignoring it", e);
+      return;
     }
-    await this.loadBundled();
-  }
-
-  async loadBundled() {
-    try {
-      const response = await fetch("/static/models/sign_model.json", { cache: "no-store" });
-      this.load(await response.json(), "bundled file (static/models/sign_model.json)");
-    } catch (e) {
-      console.warn("No bundled sign model", e);
-      this.samples = {};
-      this.source = "empty";
-      this.prepare();
-    }
-  }
-
-  forgetBrowserCopy() {
-    try { localStorage.removeItem(MODEL_STORAGE_KEY); } catch (e) { /* ignore */ }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// SignStabilizer: turns noisy frame-by-frame guesses into clean, single sign events.
-// ---------------------------------------------------------------------------
-export class SignStabilizer {
-  constructor(onSign) {
-    this.onSign = onSign;
-    this.reset();
-  }
-
-  reset() {
-    this.candidate = null;
-    this.since = 0;
-    this.locked = null;      // the sign we just emitted; must be released before it can repeat
-    this.releasedAt = 0;
-    this.progress = 0;
-  }
-
-  // prediction = result of SignClassifier.predict (or null), time = performance.now()
-  feed(prediction, time) {
-    const label = prediction && prediction.label && prediction.confidence >= RECOGNITION.minConfidence
-      ? prediction.label : null;
-
-    if (this.locked) {
-      // Wait until the hand changes shape (or disappears) for 300 ms before accepting a new sign.
-      if (label !== this.locked) {
-        if (!this.releasedAt) this.releasedAt = time;
-        if (time - this.releasedAt > 300) { this.locked = null; this.releasedAt = 0; }
+    const rec = this.recording;
+    rec.frames.push(frame);
+    if (hasHand) { rec.lastHandAt = now; rec.handFrames++; }
+    const handsDown = now - rec.lastHandAt > SEGMENT.endAfterNoHandMs;
+    const tooLong = now - rec.startedAt > SEGMENT.maxMs;
+    if (handsDown || tooLong) {
+      this.recording = null;
+      if (tooLong && hasHand) this.needRelease = true;
+      if (rec.handFrames >= SEGMENT.minHandFrames) {
+        this.handlers.onSequence?.({ frames: rec.frames, captureMs: Math.round(now - rec.startedAt), handFrames: rec.handFrames });
       } else {
-        this.releasedAt = 0;
+        this.handlers.onState?.("too-short");
       }
-      this.progress = 0;
-      return { label, progress: 0, locked: this.locked };
     }
+  }
 
-    if (label !== this.candidate) {
-      this.candidate = label;
-      this.since = time;
+  // Draws the camera picture (mirrored like a selfie) + the detected hands onto the display canvas,
+  // cropped to the canvas shape ("cover").
+  draw(hands) {
+    const canvas = this.display;
+    if (!canvas) return;
+    const cw = canvas.clientWidth || 320;
+    const ch = canvas.clientHeight || 240;
+    if (canvas.width !== cw) canvas.width = cw;
+    if (canvas.height !== ch) canvas.height = ch;
+    const pw = this.proc.width;
+    const ph = this.proc.height;
+    const scale = Math.max(cw / pw, ch / ph);
+    const ox = (cw - pw * scale) / 2;
+    const oy = (ch - ph * scale) / 2;
+    const ctx = canvas.getContext("2d");
+    ctx.save();
+    ctx.translate(cw, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(this.proc, ox, oy, pw * scale, ph * scale);
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = this.recording ? "rgba(255,90,80,.95)" : "rgba(255,255,255,.85)";
+    ctx.fillStyle = this.recording ? "#ff5a50" : "#5eead4";
+    for (const hand of hands) {
+      const px = (p) => ox + p.x * pw * scale;
+      const py = (p) => oy + p.y * ph * scale;
+      for (const [a, b] of HAND_LINKS) {
+        ctx.beginPath();
+        ctx.moveTo(px(hand[a]), py(hand[a]));
+        ctx.lineTo(px(hand[b]), py(hand[b]));
+        ctx.stroke();
+      }
+      for (const p of hand) {
+        ctx.beginPath();
+        ctx.arc(px(p), py(p), 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
-    if (!label) {
-      this.progress = 0;
-      return { label: null, progress: 0 };
-    }
-    const held = time - this.since;
-    this.progress = Math.min(1, held / RECOGNITION.holdMs);
-    if (held >= RECOGNITION.holdMs) {
-      this.locked = label;
-      this.candidate = null;
-      this.onSign({ label, confidence: prediction.confidence, holdMs: Math.round(held) });
-      return { label, progress: 1, emitted: true };
-    }
-    return { label, progress: this.progress };
+    ctx.restore();
   }
 }

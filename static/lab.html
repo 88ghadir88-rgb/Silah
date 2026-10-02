@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SignConnect – Model Lab</title>
+  <link rel="icon" href="/static/assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <!-- Developer page for the team. NOT part of the SignConnect app or the call experience. -->
+  <div class="lab">
+    <h1>SignConnect Model Lab <span class="muted">(team tool, not part of the product)</span></h1>
+    <div class="panel" id="modelInfo">Loading model info…</div>
+    <div class="cols">
+      <div class="panel">
+        <div class="cam-card"><canvas id="camCanvas"></canvas><span class="ai-badge" id="aiBadge">ASL model</span>
+          <span class="cam-stats" id="camStats"></span><div class="cam-msg" id="camMsg">Press “Start camera”.</div></div>
+        <p><button class="primary" id="btnStart">Start camera</button></p>
+        <p class="muted">Raise your hand into the picture, perform ONE sign, then lower your hand out of the picture.
+          Face the camera, upper body visible, good light from the front. Add <code>?gpu=1</code> to the address to try the graphics chip.</p>
+      </div>
+      <div class="panel">
+        <h3>Live result</h3>
+        <div id="result" class="muted">No sign yet.</div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Accuracy test</h3>
+      <p class="muted">Each sign is asked several times in random order. Fair test: use a tester who did not practise with the person checking the results, and report the number exactly.</p>
+      <p>Tester <input id="tester" maxlength="60" placeholder="name">
+        <select id="tries"><option value="3">3 tries per sign</option><option value="5" selected>5 tries per sign</option><option value="10">10 tries per sign</option></select>
+        <button class="primary" id="btnTest">▶ Start test</button> <button id="btnStop">Stop</button></p>
+      <div class="prompt" id="prompt"></div>
+      <div id="testResults"></div>
+    </div>
+    <div class="panel">
+      <h3>Supported signs (learn them before the demo)</h3>
+      <table id="vocab"></table>
+    </div>
+  </div>
+  <script type="module" src="/static/js/lab.js"></script>
+</body>
+</html>

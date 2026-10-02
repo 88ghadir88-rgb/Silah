@@ -33,7 +33,7 @@ class ApiTest(unittest.TestCase):
 
         r = self.post("/api/rooms/test/messages", {
             "sender": "user", "source": "live_sign", "text": "Yes.",
-            "meta": {"signs": ["YES"], "sign_hold_ms": 700, "avg_inference_ms": 12.5}})
+            "meta": {"signs": ["yes"], "recognize_ms": 300, "model_inference_ms": 80}})
         self.post("/api/rooms/test/messages/%d/ack" % r.get_json()["message"]["seq"], {"event": "spoken"})
 
         polled = self.client.get("/api/rooms/test?since=1").get_json()
@@ -42,7 +42,8 @@ class ApiTest(unittest.TestCase):
         summary = self.post("/api/rooms/test/end").get_json()["summary"]
         self.assertTrue(summary["completed"])
         self.assertTrue(summary["completed_with_signs_only"])
-        self.assertEqual(summary["signs_recognized"], ["YES"])
+        self.assertEqual(summary["signs_recognized"], ["yes"])
+        self.assertEqual(summary["latency"]["sign_recognition_ms"], 300)
         self.assertEqual(summary["latency"]["stt_finalize_ms"], 400)
         self.assertIsNotNone(summary["latency"]["caller_speech_to_screen_ms"])
         self.assertIsNotNone(summary["latency"]["user_send_to_caller_audio_ms"])
@@ -87,6 +88,52 @@ class ApiTest(unittest.TestCase):
             {"expected": "NO", "predicted": "", "time_ms": None}]})
         self.assertEqual(r.get_json()["evaluation"]["accuracy"], 0.5)
         self.assertEqual(len(self.client.get("/api/evaluations").get_json()["evaluations"]), 1)
+
+
+    def test_answer_sets_mode(self):
+        self.post("/api/rooms/m/ring", {"mode": "live"})
+        r = self.post("/api/rooms/m/answer", {"mode": "demo"})
+        self.assertEqual(r.get_json()["room"]["mode"], "demo")
+
+
+class RecognizerTest(unittest.TestCase):
+    """Checks that the pre-trained ASL model loads and that /api/recognize works."""
+
+    def setUp(self):
+        self.client = signconnect.app.test_client()
+
+    @staticmethod
+    def frame(with_hand=True, shift=0.0):
+        hand = [0.5 + shift + (i % 5) * 0.01 for i in range(42)] if with_hand else None
+        return {"lips": [0.5 + (i % 7) * 0.005 for i in range(80)], "left": None,
+                "right": hand, "pose": [0.4 + i * 0.01 for i in range(20)]}
+
+    def test_model_loaded(self):
+        info = self.client.get("/api/model").get_json()
+        self.assertTrue(info["ready"], info.get("error"))
+        self.assertEqual(info["total_signs_in_model"], 250)
+        self.assertIn("yes", info["vocabulary"])
+
+    def test_recognize_returns_model_output(self):
+        frames = [self.frame(shift=t * 0.004) for t in range(20)]
+        r = self.client.post("/api/recognize", json={"frames": frames}).get_json()
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["hand_frames"], 20)
+        self.assertEqual(len(r["top_all"]), 5)
+        self.assertIn(r["closest"], recognizer_module.VOCABULARY)
+        self.assertAlmostEqual(sum(v["confidence"] for v in r["top_vocabulary"]) <= 1.0001, True)
+
+    def test_recognize_rejects_without_hands(self):
+        frames = [self.frame(with_hand=False) for _ in range(20)]
+        r = self.client.post("/api/recognize", json={"frames": frames}).get_json()
+        self.assertFalse(r["accepted"])
+        self.assertIsNone(r["sign"])
+
+    def test_recognize_validation(self):
+        self.assertEqual(self.client.post("/api/recognize", json={"frames": []}).status_code, 400)
+
+
+import recognizer as recognizer_module  # noqa: E402
 
 
 if __name__ == "__main__":

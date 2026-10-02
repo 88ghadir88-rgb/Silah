@@ -4,593 +4,482 @@ This guide is for a team with little or no programming experience. Read it from 
 Every step says what to do, what you should see, and what to do if it goes wrong.
 
 **Contents**
-1. [The recommended stack (one choice for each part)](#1-the-recommended-stack)
-2. [Architecture](#2-architecture)
-3. [Why this is realistic in 3 days](#3-why-this-is-realistic-in-3-days)
-4. [Day 0 setup checklist (before the hackathon)](#4-day-0-setup-checklist)
-5. [Project files: what each one does](#5-project-files)
-6. [Step-by-step: run, train, test, deploy](#6-step-by-step)
-7. [Matching your Figma design](#7-matching-your-figma-design)
-8. [Live AI mode and Demo mode](#8-live-ai-mode-and-demo-mode)
-9. [Measuring impact (real numbers only)](#9-measuring-impact)
-10. [Implemented / Simulated / Future](#10-implemented--simulated--future)
-11. [3-day plan](#11-3-day-plan)
-12. [Troubleshooting](#12-troubleshooting)
-13. [Final demo checklist](#13-final-demo-checklist)
-14. [Roadmap](#14-roadmap)
-15. [How the code works (for curious team members)](#15-how-the-code-works)
+1. [Product architecture: two UI layers](#1-product-architecture-two-ui-layers)
+2. [The recommended stack](#2-the-recommended-stack)
+3. [System architecture](#3-system-architecture)
+4. [Why this is realistic in 3 days](#4-why-this-is-realistic-in-3-days)
+5. [Day 0 setup checklist](#5-day-0-setup-checklist)
+6. [Project files](#6-project-files)
+7. [Step-by-step: install, run, test, deploy](#7-step-by-step)
+8. [The supported signs, and how to get good recognition](#8-the-supported-signs)
+9. [Figma → code mapping](#9-figma--code-mapping)
+10. [Live AI mode and Demo mode](#10-live-ai-mode-and-demo-mode)
+11. [Measuring impact (real numbers only)](#11-measuring-impact)
+12. [Implemented / Simulated / Future](#12-implemented--simulated--future)
+13. [3-day plan](#13-3-day-plan)
+14. [Troubleshooting](#14-troubleshooting)
+15. [Final demo checklist](#15-final-demo-checklist)
+16. [Roadmap](#16-roadmap)
+17. [How the code works](#17-how-the-code-works)
 
 ---
 
-## 1. The recommended stack
+## 1. Product architecture: two UI layers
 
-| Part | Our choice | Why we chose it |
+```
+LAYER 1: SIGNCONNECT APP UI (installed once, activated once)
+  App screen 1  Welcome / Activation
+  App screen 2  Settings / Permissions
+  (no login, no profile, no dashboard, no home page, no camera here)
+
+        Incoming call ──► Trigger (SIMULATED in the MVP)
+                              │
+                              ▼
+LAYER 2: SIGNCONNECT CALL EXPERIENCE (our Figma call screens)
+  Layla's phone:  Incoming call → Call connected → Speech → Text
+                  → Sign camera → Sign → Text → (caller hears it) → Call summary
+  Caller's phone: Calling… → "You are talking to Layla (Deaf user)" → Sign language → Text / Voice
+```
+
+- The **Deaf user (Layla)** installs and activates SignConnect **once**. She never has to open it for a call.
+- The **hearing caller (Bank Alinma)** installs **nothing**. Their phone just shows the call.
+- The **camera belongs to the call experience** (Figma step 6), never to the app UI.
+
+> **Framing for the judges:** "For the MVP, we simulate the incoming-call trigger to demonstrate the communication experience. A production version would require native iOS telephony integration and the appropriate system-level permissions."
+
+---
+
+## 2. The recommended stack
+
+| Part | Choice | Why |
 |---|---|---|
-| **Frontend** | Plain **HTML + CSS + JavaScript** (no framework) | Nothing to compile or install. You edit a file, press refresh, and see the change. Your 7 Figma screens become 7 `<section>` blocks in one file. |
-| **Backend** | **Python 3.12 + Flask** | Flask is the smallest Python web framework. The whole backend is one file (`app.py`) with one real dependency. |
-| **Speech-to-Text** | The browser's built-in **Web Speech API** (Chrome/Edge) | Free, no API key, real-time partial captions, supports English **and Arabic (ar-SA)**. |
-| **Sign recognition** | **Google MediaPipe Hand Landmarker** (pre-trained) + a small **k-Nearest-Neighbours classifier** calibrated on samples you record yourselves | Runs in the browser on a normal laptop CPU at real-time speed. No GPU, no API key, Apache-2.0 license. Works offline. See the comparison below. |
-| **Text-to-Speech** | The browser's built-in **speechSynthesis** | Free, instant, no key, mostly offline. |
-| **Frontend ↔ Backend** | **REST over HTTPS + polling** (the browser asks “anything new?” every 0.7 s) | Simplest thing that works everywhere, including Render's free plan. WebSockets would add complexity with no visible benefit for a 2-person call. |
-| **Cloud hosting** | **Render** (free Web Service) | Deploys directly from GitHub, gives you an `https://` address (required for camera and microphone), and needs no Docker. |
-| **Database** | **None** | Calls live in server memory. You don't need to keep data after the demo. |
-| **Code sharing** | **GitHub** + **GitHub Desktop** | You click buttons instead of typing git commands. |
+| Frontend | Plain **HTML + CSS + JavaScript** | No build step. Edit a file, refresh, and see the change. |
+| Backend | **Python 3.12 + Flask** (`app.py`) | Smallest Python web framework. |
+| **Sign recognition** | **Pre-trained ASL model** (TensorFlow Lite, 250 ASL signs) running on the **backend** with `ai-edge-litert`, fed by **Google MediaPipe Holistic** landmarks from the browser | A real, pre-trained sign-language model: no training needed, CPU only, about 30–80 ms per sign. |
+| Speech-to-Text | Browser **Web Speech API** (Chrome/Edge) on the caller's phone | Free, real time, **Arabic (ar-SA)** and English, no key. |
+| Text-to-Speech | Browser **speechSynthesis** on the caller's phone | Free and instant. |
+| Frontend ↔ Backend | **REST + JSON over HTTPS**, polling every 0.7 s | Simplest reliable option on a free host. |
+| Hosting | **Render** free Web Service | Deploys from GitHub; gives https (needed for camera and mic). |
+| Database | None | Calls live in server memory. |
 
-**API keys needed: none.** Nothing in this project costs money.
+**API keys needed: none.** **GPU needed: no.** **Cost: free.**
 
-### Options we compared (and why we didn't pick them)
+### Why this sign-recognition model
 
-**Frontend**
 | Option | Verdict |
 |---|---|
-| HTML/CSS/JS ✅ | No build tools. You can see exactly what the browser runs. |
-| React | Needs Node.js, npm, a build step, and new concepts like JSX, state, and hooks. That's too much to learn in 3 days. |
-| Streamlit | Easy for dashboards, but every click reloads the page. Live webcam, live captions, and a phone-like UI are hard to do with it. |
+| MediaPipe Gesture Recognizer (7 gestures) | ❌ Not sign language (only "I love you" is an ASL sign). |
+| ASL alphabet (fingerspelling) models | ❌ Spelling letter by letter is not a conversation. |
+| Our own few-shot classifier (version 1 of this repo) | ❌ The team would have to record samples first; it shipped empty, so it showed the hand but never gave a sign (see 17.4). |
+| **Pre-trained isolated-sign ASL model (Google ISLR data, 250 signs)** ✅ | Real ASL words with movement, trained on ~94,000 recordings by 21 Deaf signers. Works out of the box. |
 
-**Backend**
-| Option | Verdict |
-|---|---|
-| Flask ✅ | One file, very beginner-friendly, lots of tutorials. |
-| FastAPI | Also good, but its async style and type hints add concepts you don't need here. |
+Model details, author and license: `models/asl_islr/README.md`. Reported accuracy: **73.6% top-1 over all 250 signs**.
+SignConnect only uses **10** of the 250 signs, which makes the choice much easier for the model, and it rejects uncertain answers.
 
-**Speech-to-Text**
-| Option | Verdict |
-|---|---|
-| Web Speech API ✅ | Free, real-time, no key. Downsides: Chrome/Edge only, needs internet (Chrome sends the audio to Google). We cover these with Demo mode and the typed fallback. |
-| OpenAI Whisper on your laptop | Too slow for real time on a laptop CPU, and a big install (PyTorch). |
-| Whisper / Deepgram / Google Cloud / Azure APIs | Accurate, but they need an account, a key, sometimes a credit card, and streaming code. This is the right production path (see Roadmap). |
-
-**Sign language recognition**
-
-| Option | Signs | Ready to use? | Hardware | Setup risk | Verdict |
-|---|---|---|---|---|---|
-| MediaPipe **Gesture Recognizer** (default model) | 7 generic gestures (thumbs up, victory…) | Yes | CPU, browser | Very low | ❌ Only one gesture (“I love you”) is an actual ASL sign. Calling it sign language would be dishonest. |
-| **ASL alphabet** image classifiers (Kaggle CNNs, Roboflow models) | 26 letters (fingerspelling) | Partly; often needs an API key or a Python TensorFlow server | CPU/GPU | Medium | ❌ Spelling “Y-E-S” letter by letter is not a realistic conversation, and accuracy drops a lot with different backgrounds and lighting. |
-| **Word-level ASL models** (Kaggle *Isolated Sign Language Recognition*, 250 signs; WLASL I3D) | 250–2000 words, with motion | Weights are scattered across competition notebooks; preprocessing has to match exactly | CPU possible | **High** | ❌ for this hackathon. The model needs full-body landmark sequences, start/end detection, and a TFLite runtime, and accuracy on new signers through a webcam is unproven. **This is our Phase 1 upgrade.** |
-| **MediaPipe Hand Landmarker + kNN on your own samples** ✅ | 6 static ASL handshapes (you can add more) | Yes: the pre-trained hand model is included in this repo | CPU, browser, real time | **Low** | ✅ Reliable, fast, offline, honest, and **measurable** with the built-in Test screen. |
-
-**Why the chosen approach works:** Google's pre-trained model does the hard part, which is finding the hand and 21 joint points in any lighting and against any background. The kNN classifier only needs to tell 6 hand shapes apart, and about 40 examples per sign is enough for that. You record those examples in about 5 minutes on the **Train** screen.
-
-**The honest limitation:** real ASL signs also include **movement** and a **location on the body**. The MVP only recognizes the **handshape**. So say *“a small vocabulary of static ASL handshapes”*, not *“ASL translation”*.
-
-**Supported vocabulary (you can change it in `static/js/config.js`):**
-
-| Sign | Handshape | Caller hears |
-|---|---|---|
-| YES | S-hand (fist) | “Yes.” |
-| NO | index + middle finger + thumb | “No.” |
-| THANK YOU | flat B-hand | “Thank you.” |
-| FINE | 5-hand (fingers spread) | “That time works for me.” |
-| HELP | A-hand, thumb up | “I need help, please.” |
-| PHONE | Y-hand | “Please send me the details by text message.” |
-
-Signs can be combined: NO + THANK YOU → “No. Thank you.”
-
-**Disclaimer to use (on the home screen already, and on your slides):**
-> The current MVP recognizes a small set of static ASL (American Sign Language) handshapes using Google's pre-trained MediaPipe hand-tracking model and a lightweight classifier calibrated on samples recorded by our team. It demonstrates technical feasibility. It is not full sign-language translation and does not support Saudi Sign Language. Production deployment would require adaptation, testing and validation for Saudi Sign Language (SSL) with Deaf users.
+**Honest framing (use this sentence):**
+> The current MVP uses a pre-trained English/ASL sign-language model to demonstrate technical feasibility. A production deployment would require adaptation, testing and validation for Saudi Sign Language (SSL).
 
 ---
 
-## 2. Architecture
+## 3. System architecture
 
 ```
- HEARING CALLER  ──►  DEAF USER (Sara)
- ─────────────────────────────────────────────────────────────────────────────
-  Caller speaks ─► Microphone ─► Web Speech API (STT) ─► text ─► Flask backend
-                                 (in the browser;               (stores message,
-                                  audio goes to Google)          timestamps it)
-                                                                      │ polling
-                                                                      ▼
-                                                    Sara's screen shows the caption
+ CALLER'S PHONE (/caller)                 CLOUD BACKEND (Render, Flask)             LAYLA'S PHONE (/)
+ ─────────────────────────                ─────────────────────────────             ─────────────────
+ Caller speaks
+   → Web Speech API (STT) ── text ──────► POST /api/rooms/layla/messages ──poll──► Speech → Text (step 5)
 
- DEAF USER (Sara)  ──►  HEARING CALLER
- ─────────────────────────────────────────────────────────────────────────────
-  Sara signs ─► Webcam ─► MediaPipe Hand Landmarker ─► 21 hand points
-                          (pre-trained, in the browser, CPU)
-                ─► kNN classifier ─► sign "YES" ─► phrase "Yes." ─► Flask backend
-                   (in the browser)                                     │ polling
-                                                                        ▼
-                                  caller's device ─► speechSynthesis (TTS) ─► caller hears "Yes."
+                                                                                     Layla presses Sign
+                                                                                     → webcam (step 6)
+                                                                                     → MediaPipe Holistic
+                                                                                       (in browser, CPU):
+                                                                                       lips + hands + arms
+                                          POST /api/recognize  ◄── landmark numbers ─┘
+                                          → recognizer.py
+                                          → pre-trained ASL model (TFLite, CPU)
+                                          → "YES" 82% ─────────────────────────────► "نعم، أكّد الموعد"
+                                                                                     Layla taps ✓ send
+ Text → Speech (speechSynthesis) ◄─poll── POST /api/rooms/layla/messages ◄────────────┘
+   → caller HEARS the reply (step 7)
 ```
 
-```
- ┌──────────────────────────────┐        HTTPS (REST + JSON)       ┌────────────────────────────┐
- │  WEB FRONTEND (browser)      │  POST /api/rooms/sara/messages   │  CLOUD BACKEND (Render)    │
- │                              │ ───────────────────────────────► │  Flask  (app.py)           │
- │  index.html  = Sara's app    │                                  │                            │
- │  caller.html = caller's app  │  GET /api/rooms/sara?since=12    │  • call state (ringing,    │
- │                              │ ◄─────────────────────────────── │    connected, ended)       │
- │  AI that runs HERE:          │       every 0.7 s (polling)      │  • message relay           │
- │  • Web Speech API  (STT) ────┼──► Google speech service         │  • timestamps & latency    │
- │  • MediaPipe hand model      │    (cloud, used by Chrome)       │  • call summary            │
- │  • kNN sign classifier       │                                  │  • accuracy test results   │
- │  • speechSynthesis (TTS)     │                                  │  (no audio, no video)      │
- └──────────────────────────────┘                                  └────────────────────────────┘
-```
+| Component | Runs where | Internet? | API key? |
+|---|---|---|---|
+| Web pages | Served by Render, run in the browser | to load | no |
+| Flask backend + call relay | Render (or your laptop) | yes, between phones | no |
+| **ASL sign model** | **Backend** (CPU) | browser → backend | no |
+| MediaPipe Holistic (landmarks) | Browser (CPU), files in the repo | no | no |
+| Speech-to-text | Caller's browser → Google speech service | **yes** | no |
+| Text-to-speech | Caller's browser | usually no | no |
 
-**Where each part runs**
-
-| Component | Runs where | Internet needed? | API key? | Cost / limits |
-|---|---|---|---|---|
-| Web pages (HTML/CSS/JS) | Served by Render, executed in the browser | To load the page | No | Free |
-| Flask backend | Render cloud (or your laptop while developing) | Yes, between devices | No | Render free plan: the server sleeps after ~15 min without visitors and takes up to about a minute to wake up |
-| Speech-to-Text | Browser → Google's speech service | **Yes** | No | Free, no published quota for Chrome; Chrome/Edge only |
-| Hand model + sign classifier | **In the browser, on the laptop CPU** | No (files are inside this repo) | No | Free, Apache-2.0 |
-| Text-to-Speech | Browser / operating system voices | Usually no | No | Free |
-| GPU | **Not required** | – | – | – |
-
-**Why the AI runs in the browser:** video never leaves the device (good for privacy), there's no upload delay, and you don't need a paid GPU server. The cloud backend connects the two people in the call and records the measurements. That is a realistic design for this kind of product.
+**Privacy note for the pitch:** no video or audio is sent to our server. For signs, only the **coordinates** of the lips, hands and arms are sent (numbers, a few KB).
 
 ---
 
-## 3. Why this is realistic in 3 days
+## 4. Why this is realistic in 3 days
 
-**What you can realistically build (and this repo already contains it):**
-- a simulated incoming call with Answer/Decline, a call timer, and End call
-- live captions of the caller's speech (English or Arabic)
-- webcam sign recognition of 6 signs that you train yourselves
-- the signed reply spoken aloud to the caller
-- a call summary with transcript, sources, and measured latency
-- a Train screen and an accuracy Test screen
-- a separate caller page, so a second laptop or Android phone acts as the “hospital phone”
-
-**What you should NOT attempt in 3 days:**
-- real cellular calls (iOS and Android don't allow apps to read or inject call audio; real calls need a telecom provider such as Twilio, phone numbers, and approvals)
-- training a sign-language model from scratch, or anything for Saudi Sign Language (no public dataset or model is ready)
-- continuous sentence-level sign translation
-- user accounts, databases, Docker, native mobile apps
-
-**Feasibility arguments for the judges:**
-- **Model availability:** Google's production MediaPipe hand model, Apache-2.0, already bundled in the repo (`static/vendor/mediapipe/`).
-- **Data:** you only need about 40 samples per sign, recorded by the team on the Train screen in a few minutes.
-- **Hardware:** an ordinary laptop CPU runs the hand model in real time. No GPU.
-- **Cloud:** one small Flask service on a free plan. No GPU server, no API keys, no cost.
+- **Already built (this repo):** both UI layers, the full call flow on two phones, live Arabic/English captions, real ASL sign recognition by a pre-trained model, voice replies, call summary with measured timings, Demo mode, typed fallback, and a Lab page for accuracy testing.
+- **Don't attempt:** real cellular calls, a native iOS app, Saudi Sign Language, training your own model, or continuous sentence translation.
+- **Hardware:** an ordinary laptop. MediaPipe ran at about 20 fps on CPU in our tests; the model takes about 30–80 ms per sign.
+- **Cloud:** one free Flask service. The model is 7.6 MB, so no GPU server is needed.
 
 ---
 
-## 4. Day 0 setup checklist
+## 5. Day 0 setup checklist
 
-Do all of this **before** the hackathon, on **every** team laptop. It takes about 45 minutes.
+Do this **before** the hackathon, on every team laptop (about 45 minutes).
 
-### Software
-- [ ] **Google Chrome** (latest): <https://www.google.com/chrome/>. Speech recognition only works in Chrome or Edge. Use Chrome for everything.
+**Software**
+- [ ] **Google Chrome** (latest). Speech recognition needs Chrome or Edge.
 - [ ] **Python 3.12.10**: <https://www.python.org/downloads/release/python-31210/>
-  - Windows: download the *Windows installer (64-bit)*. On the first installer screen, **tick “Add python.exe to PATH”**, then click *Install Now*.
-  - macOS: download the *macOS 64-bit universal2 installer* and run it.
-  - Check: open a terminal (Windows: *PowerShell*; Mac: *Terminal*) and type `python --version` (Windows) or `python3.12 --version` (Mac). You should see `Python 3.12.10`.
-- [ ] **Visual Studio Code**: <https://code.visualstudio.com/>. After installing, open it, go to *Extensions* (the 4-squares icon), and install **Python** (by Microsoft).
-- [ ] **GitHub Desktop**: <https://desktop.github.com/>. Sign in with your GitHub account.
+  - Windows: *Windows installer (64-bit)*; **tick "Add python.exe to PATH"**.
+  - Mac: *macOS 64-bit universal2 installer*. ⚠️ The sign-model library only exists for **Apple-Silicon Macs (M1/M2/M3/M4)**, not Intel Macs. On an Intel Mac, use the Render link to run the app (step 7.6).
+  - Check with `python --version` (Windows) or `python3.12 --version` (Mac). You should see `Python 3.12.10`.
+- [ ] **Visual Studio Code** with the **Python** extension (by Microsoft).
+- [ ] **GitHub Desktop**: <https://desktop.github.com/>. You don't need to install Git separately.
 
-### Accounts
-- [ ] **GitHub** account for every member (free): <https://github.com/signup>. The repo owner adds teammates under *Settings → Collaborators*.
-- [ ] **Render** account (free): <https://render.com>. Click *Get Started* and **sign up with GitHub**. (Free web services did not require a credit card when this guide was written. If Render asks for one, tell your mentor.)
-- [ ] No AI or API accounts are needed.
+**Accounts (all free)**
+- [ ] **GitHub** for every member. The repo owner adds teammates under *Settings → Collaborators*.
+- [ ] **Render**: <https://render.com>, *Sign up with GitHub*.
+- [ ] **No AI or API accounts. No paid services.**
 
-### Hardware & browser checks
-- [ ] A laptop with a working **webcam** and **microphone**.
-- [ ] Optional but recommended: a **second device** for the hearing caller (second laptop with Chrome, or an **Android phone with Chrome**). iPhone Safari speech recognition is less reliable, so use the typed fallback there if needed.
-- [ ] A **phone hotspot** as a backup Wi-Fi.
-- [ ] Wired or USB **speakers** if the room is loud (laptop speakers are quiet).
-- [ ] Test the camera and microphone in Chrome: open <https://webcamtests.com> and <https://mictests.com> (or any similar site).
+**Hardware**
+- [ ] A laptop with a webcam and microphone.
+- [ ] Optional: a second device for the caller (laptop, or an Android phone with Chrome).
+- [ ] Phone hotspot as backup internet; external speaker if the room is loud.
 
-### Get the code (one-time)
-- [ ] In GitHub Desktop: *File → Clone repository → URL* → `https://github.com/88ghadir88-rgb/Silah` → choose a folder (e.g. *Documents*) → **Clone**.
-- [ ] If the code is still on the branch `claude/signconnect-hackathon-jmrti7` (not merged to `main` yet), select that branch in the *Current branch* menu at the top of GitHub Desktop.
+**Get the code:** GitHub Desktop → *File → Clone repository → URL* → `https://github.com/88ghadir88-rgb/Silah` → if not merged yet, switch to the branch `claude/signconnect-hackathon-jmrti7`.
 
 ---
 
-## 5. Project files
+## 6. Project files
 
 ```
 Silah/
-├── app.py                      ← Flask backend (cloud). Serves the pages + the API.
-├── requirements.txt            ← exact Python library versions
-├── render.yaml                 ← Render settings (same as the manual steps in 6.5)
-├── .python-version             ← tells Render to use Python 3.12.10
-├── README.md                   ← short overview
-├── docs/MENTOR_GUIDE.md        ← this guide
-├── tests/test_api.py           ← automatic checks for the backend
-└── static/                     ← everything the browser downloads
-    ├── index.html              ← Sara's app: the 7 Figma screens + Train + Test
-    ├── caller.html             ← the hearing caller's page ("hospital phone")
-    ├── css/styles.css          ← all styling; Figma colours go at the top
-    ├── js/config.js            ← signs, phrases, demo script, settings  ← EDIT THIS
-    ├── js/app.js               ← Sara's screen logic
-    ├── js/caller.js            ← caller page logic
-    ├── js/api.js               ← talks to the backend (REST + polling)
-    ├── js/speech.js            ← speech-to-text + text-to-speech
-    ├── js/signs.js             ← webcam + MediaPipe + kNN classifier
-    ├── models/sign_model.json  ← your trained signs (empty until you train; see 6.4)
-    ├── assets/logo.svg         ← replace with your Figma logo
-    └── vendor/mediapipe/       ← Google's pre-trained hand model + its runtime (don't edit)
+├── app.py                 ← Flask backend: pages, call relay, summary, /api/recognize
+├── recognizer.py          ← runs the pre-trained ASL model + the vocabulary + thresholds
+├── models/asl_islr/       ← the pre-trained ASL model (model.tflite, labels.json, LICENSE, README)
+├── requirements.txt       ← exact library versions
+├── render.yaml            ← Render settings
+├── .python-version        ← Python 3.12.10 for Render
+├── tests/test_api.py      ← automatic checks (backend + model)
+├── docs/MENTOR_GUIDE.md   ← this guide
+└── static/
+    ├── index.html         ← LAYLA'S PHONE: App UI (2 screens) + Call Experience (Figma)
+    ├── caller.html        ← CALLER'S PHONE: Figma steps 1, 4, 7
+    ├── stage.html         ← both phones side by side on one laptop (/stage)
+    ├── lab.html           ← team tool: try the model, measure accuracy (/lab)
+    ├── css/styles.css     ← all styling; Figma colours at the top
+    ├── js/config.js       ← sign phrases, demo script, names, defaults   ← EDIT THIS
+    ├── js/app.js          ← Layla's phone logic
+    ├── js/caller.js       ← caller's phone logic
+    ├── js/signs.js        ← webcam + MediaPipe Holistic + sign segmentation
+    ├── js/lab.js          ← Lab page logic
+    ├── js/api.js          ← talks to the backend
+    ├── js/speech.js       ← speech-to-text + text-to-speech
+    ├── js/icons.js, ui.js ← icons + small helpers
+    └── vendor/mediapipe/  ← Google MediaPipe runtime + Holistic model (don't edit)
 ```
-
-You will mainly edit **`config.js`** (vocabulary, phrases, demo script), **`styles.css`** (Figma look), and **`index.html`** (texts and layout).
 
 ---
 
-## 6. Step-by-step
+## 7. Step-by-step
 
-### 6.1 Open the project and create a virtual environment
+### 7.1 Create the virtual environment and install everything (one time)
+In VS Code: *File → Open Folder* → `Silah` → *Terminal → New Terminal*, then:
 
-A *virtual environment* is a private folder of Python libraries for this project only.
-
-1. Open **VS Code** → *File → Open Folder* → select the `Silah` folder.
-2. Open the built-in terminal: *Terminal → New Terminal*.
-3. Run these commands one line at a time:
-
-**Windows (PowerShell):**
+**Windows (PowerShell)**
 ```powershell
 py -3.12 -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
-
-**macOS (Terminal):**
+**Mac (Apple Silicon)**
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
+**You should see:** `(.venv)` at the start of the line, and at the end `Successfully installed … ai-edge-litert-2.2.0 … Flask-3.1.3 … numpy-2.2.6 …`.
 
-**You should see:** `(.venv)` at the start of the terminal line, and at the end `Successfully installed Flask-3.1.3 ...`.
+**If you get an error:**
+- `Activate.ps1 cannot be loaded` → run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, answer `Y`.
+- `No matching distribution found for ai-edge-litert` → you're on an Intel Mac or a 32-bit Python. Use 64-bit Python 3.12, or use the Render link.
 
-**If you see an error:**
-- `Activate.ps1 cannot be loaded because running scripts is disabled` → run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, answer `Y`, then try again.
-- `py is not recognized` / `python3.12: command not found` → Python is not installed or not on PATH. Reinstall Python 3.12.10 and tick *Add python.exe to PATH*.
-- If VS Code asks *“We noticed a new environment… select it for the workspace?”* → click **Yes**.
-
-> Every time you open a new terminal, activate the environment again (the second command above).
-
-### 6.2 Run the automatic tests
+### 7.2 Run the tests
 ```bash
 python -m unittest -v
 ```
-**You should see:** `Ran 7 tests ... OK`. If not, copy the error message to your mentor or ChatGPT/Claude.
+**You should see:** `Ran 12 tests … OK`. These tests also load the ASL model and run it once.
 
-### 6.3 Run the app on your laptop
+### 7.3 Start the app
 ```bash
 python app.py
 ```
-**You should see:**
-```
-  SignConnect is running.
-  Sara (Deaf user) screen:  http://localhost:8000/
-  Hearing caller screen:    http://localhost:8000/caller
-```
-Open **Chrome** at <http://localhost:8000>. Stop the server with **Ctrl + C** in the terminal.
+You should see three addresses. Open in **Chrome**:
 
-**First test (Demo mode, about 2 minutes):**
-1. Settings: *AI mode* = **DEMO**, *caller is* = **on this laptop**.
-2. Click **📞 Simulate incoming hospital call** → **Answer**.
-3. Click **▶ Play next scripted caller line (DEMO)**. The text appears.
-4. Click **✋ Reply in sign language** and allow the camera. You should see yourself.
-5. Click **▶ Use scripted reply (DEMO)** → **Review →** → **🔊 Speak to caller**. You should hear “Yes.”
-6. Repeat 3–5, then click **End** to see the summary. All items are labeled **DEMO**.
-
-**If it doesn't work:**
-- `Address already in use` → another program is using port 8000. Run with another port: Windows `$env:PORT=8001; python app.py`, Mac `PORT=8001 python app.py`, then open `http://localhost:8001`.
-- Blank page or buttons do nothing → press **F12** → *Console* tab → read the red error. Usually it's a typo in a file you edited.
-
-### 6.4 Train the signs (Live AI)
-
-1. Home → **✋ Train signs**. Allow the camera.
-2. Good conditions: face a window or lamp (light in front of you, not behind), plain background, your hand fully visible and about 40–60 cm from the camera.
-3. For each sign: click **● Record**. After “Get ready”, hold the handshape and **move it slightly** for 4 seconds (a bit closer and further away, small turns). This variety makes recognition robust.
-4. Record each sign **2–3 times** (it adds up: 80–120 samples per sign). If possible, let **two different team members** record.
-5. Watch **Live guess** below the camera: it should show the right sign when you make it, and *unknown* when your hand is relaxed.
-6. If two signs get confused (e.g. YES and HELP), record more samples of both, showing the difference clearly (thumb up vs. thumb across).
-
-Samples are saved automatically **in this browser on this laptop**.
-
-**Share the model with the team and the cloud version:**
-1. Click **⬇ Download model file** → you get `sign_model.json`.
-2. Replace the file `static/models/sign_model.json` in the project with it.
-3. GitHub Desktop → commit (“Add trained sign model”) → **Push origin**. Render redeploys automatically (6.5).
-4. Any browser with no samples of its own loads this file. Click **↺ Use bundled model** to switch to it.
-
-### 6.5 Measure accuracy (Test screen)
-
-1. Home → **📊 Test accuracy**. Enter the tester's name.
-2. Choose **5 tries per sign** → **▶ Start test**.
-3. When a sign appears, make it. Lower your hand when it says “Lower your hand”.
-4. At the end you get overall accuracy, per-sign accuracy, mistakes, and speed. The result is saved to the server and shown on the call summary.
-5. **Fair testing:** the most convincing number comes from a tester who did **not** record training samples. Report it exactly as measured, for example: *“87% (26/30), 1 tester not in the training data, indoor lighting”*.
-
-### 6.6 Live call on one laptop
-
-Settings: *AI mode* = **LIVE AI**, *caller is* = **on this laptop**, language = English or Arabic.
-
-1. Simulate call → Answer. The microphone status turns green.
-2. A teammate (the “hospital”) speaks: *“Hello, this is City General Hospital. Am I speaking with Sara?”* The caption appears live.
-3. Sara clicks **Reply in sign language**, signs **YES**, holds it until the bar fills, then clicks **Review → Speak to caller**. The laptop says “Yes.”
-4. Continue the scenario, then **End**.
-
-The microphone is switched off automatically while the laptop speaks, so the app doesn't caption its own voice.
-
-### 6.7 Deploy to the cloud (Render)
-
-1. Make sure your latest code is pushed to GitHub (GitHub Desktop → *Push origin*).
-2. <https://dashboard.render.com> → **New + → Web Service** → connect GitHub → choose the **Silah** repo.
-3. Fill in:
-   | Field | Value |
-   |---|---|
-   | Name | `signconnect` (it becomes part of the address) |
-   | Language | `Python 3` |
-   | Branch | `main` (or `claude/signconnect-hackathon-jmrti7` if not merged yet) |
-   | Build Command | `pip install -r requirements.txt` |
-   | Start Command | `gunicorn app:app --workers 1 --threads 8 --timeout 60 --bind 0.0.0.0:$PORT` |
-   | Instance Type | **Free** |
-   | Environment Variables | `PYTHON_VERSION` = `3.12.10` |
-4. Click **Create Web Service**. Wait about 3–5 minutes until the log says `Your service is live 🎉`.
-5. Open `https://signconnect-XXXX.onrender.com` (your address is shown at the top). Test `/api/health`. It should show `{"ok": true, ...}`.
-
-**Important:**
-- Keep `--workers 1`. With more workers the two sides of the call would end up in different memory and never see each other.
-- The free server **sleeps** after about 15 minutes without visitors. **Open the site 5 minutes before you present** and keep a tab open.
-- The server forgets calls when it restarts. That's fine for a demo.
-
-### 6.8 Two-device call (most convincing demo)
-
-- Sara's laptop: open the Render address → settings: **LIVE AI**, caller **on another device**, room `sara`.
-- Hospital device (second laptop or Android phone, in Chrome): open `https://YOUR-APP.onrender.com/caller?room=sara` → **📞 Call Sara**.
-- Sara's screen rings → Answer → the caller speaks → Sara reads → Sara signs → **the caller's device speaks the reply**.
-
-Both must use **https** (the Render address). Phones can't use the microphone on `http://` addresses.
-
----
-
-## 7. Matching your Figma design
-
-Figma is a design tool. It can't run your app, and Python can't “connect to Figma”. Instead, you **copy the design values** into the web code. The code is already organised like your 7 frames:
-
-| Figma frame | In `static/index.html` |
+| Address | What it is |
 |---|---|
-| 1. Incoming Call | `<section id="screen-incoming">` |
-| 2. Call Connected | `<section id="screen-connected">` |
-| 3. Caller Speech → Text | `<section id="screen-listen">` |
-| 4. Sign Language Camera | `<section id="screen-camera">` |
-| 5. Sign → Text | `<section id="screen-review">` |
-| 6. Text → Speech | `<section id="screen-speak">` |
-| 7. Call Summary | `<section id="screen-summary">` |
+| <http://localhost:8000/stage> | **Both phones side by side** (best for a one-laptop demo) |
+| <http://localhost:8000/> | Layla's phone only |
+| <http://localhost:8000/caller> | The caller's phone only |
+| <http://localhost:8000/lab> | Team tool: test the model |
 
-**Step A: colours, fonts, corners (30 minutes, biggest effect)**
-1. In Figma, click a button → right panel → **Inspect / Dev Mode** → copy the hex colour (e.g. `#1A73E8`).
-2. Paste it into the matching variable at the top of `static/css/styles.css` (`--color-primary`, `--color-dark`, `--radius-button`…).
-3. Font: if you use e.g. *Inter* or *Poppins* from Google Fonts, add this line inside `<head>` in **both** `index.html` and `caller.html`:
-   `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap">`
-   and set `--font: "Poppins", system-ui, sans-serif;`. (Fonts need internet; the system font is used offline.)
+Stop the server with **Ctrl + C**.
 
-**Step B: logo and icons**
-1. In Figma, select the logo layer → right panel bottom → **Export** → `+` → format **SVG** → *Export*.
-2. Save it as `static/assets/logo.svg` (replace the placeholder). For other icons: export as SVG into `static/assets/` and use `<img src="/static/assets/NAME.svg" alt="" width="24">`.
-3. Photos or illustrations: export as **PNG 2x**.
+### 7.4 First run-through (one laptop, `/stage`)
+1. Right phone (Layla): **Activate SignConnect**. Under *Permissions → Camera*, click **Allow**.
+2. Left phone (caller): press the green **Call** button. The left phone shows *Calling… Layla* and the right phone rings.
+3. Right: **Accept**. Left: *You are talking to Layla*.
+4. Speak into the laptop microphone (the left phone listens). Right phone: your words appear under *Conversion Speech → Text*.
+5. Right: press **Sign**. The camera opens with the **SignConnect AI** badge. Raise your hand, sign **YES**, then **lower your hand**. The pill shows *Recognizing…*, then **نعم، أكّد الموعد** with the model's confidence.
+6. Press **✓**. The left phone shows *Sign Language → Text / Voice* and **speaks** the reply.
+7. **End** → call summary on the right.
 
-**Step C: texts and layout**
-- Change texts directly in `index.html` (e.g. headings, button labels).
-- To move things, change the order of elements inside a `<section>`.
-- **Don't** delete or rename elements that have an `id="..."`. JavaScript uses them. Change only the text or the CSS.
+### 7.5 Measure accuracy (`/lab`)
+1. Click *Start camera*, then try each sign and watch the **raw model output**.
+2. **Accuracy test:** 5 tries per sign, in random order. Use a tester who is not the person who practised most.
+3. The result is saved to the server and shown on the call summary. Report it exactly as measured.
 
-**Avoid** “Figma to code” plugins: they produce hundreds of absolutely positioned boxes that break on other screen sizes and are hard to connect to the logic.
+### 7.6 Deploy to the cloud (Render)
+1. Push the code to GitHub (GitHub Desktop → *Push origin*).
+2. <https://dashboard.render.com> → **New + → Web Service** → choose the `Silah` repo.
+3. Fill in:
 
----
+| Field | Value |
+|---|---|
+| Language | Python 3 |
+| Branch | `main` (or `claude/signconnect-hackathon-jmrti7`) |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `gunicorn app:app --workers 1 --threads 8 --timeout 60 --bind 0.0.0.0:$PORT` |
+| Instance Type | **Free** |
+| Environment variable | `PYTHON_VERSION` = `3.12.10` |
 
-## 8. Live AI mode and Demo mode
+4. **Create Web Service** and wait for `Your service is live`. Open `https://YOUR-APP.onrender.com/api/health`. It should show `"sign_model_ready": true`.
+5. Keep `--workers 1`. The free server sleeps after about 15 minutes, so **open it 5 minutes before the demo**.
 
-| | LIVE AI mode | DEMO mode |
-|---|---|---|
-| Caller lines | Real speech-to-text (or typed, labeled TYPED) | **Pre-written** lines from `config.js`, labeled **DEMO · pre-written** |
-| Sara's replies | Real sign recognition (or typed) | Real sign recognition **still works**; the optional “Use scripted reply” is labeled **DEMO** |
-| Badge | green **LIVE AI** | orange **DEMO MODE** |
-| Latency metrics | measured | demo/typed messages are **excluded** |
-
-**How the honesty is enforced in code (not only in the UI):**
-- every message carries a `source`: `live_stt`, `live_sign`, `typed`, or `demo_script`
-- the backend **rejects** pre-written lines in a LIVE call (`app.py`, `api_post_message`)
-- the summary counts each source separately, and the latency averages use only `live_*` messages
-- the demo script lives in its own clearly named block (`DEMO_SCRIPT` in `config.js`)
-
-**When to switch to Demo mode during the presentation:** if the Wi-Fi fails and captions stop (error “Speech recognition needs internet…”). Say it out loud: *“The venue Wi-Fi is down, so I'm switching to demo mode for the caller's lines. Sign recognition runs locally and is still live.”* Judges respect that much more than a fake.
-
-**Offline fallback:** if the internet is completely down, run the server on the presenting laptop (`python app.py`, open `http://localhost:8000`). The hand model is bundled, so sign recognition and text-to-speech still work. Only speech-to-text needs the internet.
+### 7.7 Two-device demo (most convincing)
+- **Layla** (laptop with webcam): `https://YOUR-APP.onrender.com/`, activated, room `layla`.
+- **Caller** (second laptop or Android phone in Chrome): `https://YOUR-APP.onrender.com/caller`, room `layla` → **Call**.
 
 ---
 
-## 9. Measuring impact
+## 8. The supported signs
 
-Only report numbers you measured. The app measures these for you:
+These are 10 of the model's 250 ASL signs. Each one is useful in a call and usually performed with one hand and a clear movement:
 
-| Metric | Where it comes from | How to report it |
+| Sign | How (ASL) | Caller hears (Arabic / English) |
 |---|---|---|
-| **Sign recognition accuracy** | Test screen | “X% over N trials, Y testers, Z of them not in the training data” |
-| **Signs supported** | `config.js` | “6 static ASL handshapes, combinable into short replies” |
-| **Caller speech → Sara's screen** | Summary (server-timed, clock-corrected) | average over 5 live calls |
-| **Speech-to-text finalize time** (approx.) | Summary | average over 5 live calls |
-| **Sign hold time** | Summary (≈0.7 s by design) | “a sign is accepted after it's held for ~0.7 s” |
-| **Sara sends → caller hears** | Summary | average over 5 live calls |
-| **Hand-model speed** | HUD on the camera / Test screen | “X ms per frame, Y fps on a [laptop model], CPU only” |
-| **Replies given independently** | Summary: “Replies by live sign: a/b” | count over 5 full scenario runs |
-| **Flow completion rate** | Your own log | run the full hospital scenario 5 times and count runs that finished without help |
+| YES | Fist nodding up and down | نعم، أكّد الموعد / Yes, please confirm the appointment. |
+| NO | Index + middle finger snap onto the thumb | لا / No. |
+| THANK YOU | Fingertips at the chin, move forward and down | شكراً لك / Thank you. |
+| PLEASE | Flat hand rubs a circle on the chest | من فضلك / Please. |
+| HELLO | Flat hand at the temple, moves outward | مرحباً / Hello. |
+| BYE | Open hand waves (fingers bend down and up) | مع السلامة / Goodbye. |
+| CALL (ON PHONE) | Y-hand at the ear | اتصل بي من فضلك / Please call me. |
+| TOMORROW | Thumb on the cheek, arcs forward | غداً / Tomorrow. |
+| TIME | Index taps the back of the other wrist | في أي وقت؟ / What time? |
+| LATER | L-hand twists forward | لاحقاً / Later. |
 
-**Measuring speech-to-text accuracy (Word Error Rate) by hand:**
-1. Read the 5 caller lines of the demo script aloud in LIVE mode.
-2. For each line, count wrongly recognized + missing + extra words.
-3. WER = errors ÷ total words in the script. Example: 6 errors / 90 words = **6.7% WER**. Do it in English and Arabic if you support both.
+**Learn each sign from a real ASL video** (e.g. handspeak.com or lifeprint.com) and practise with the Lab page.
+Several signs in a row are combined, e.g. NO + THANK YOU → "لا، شكراً لك".
 
-**Template table for your slides:**
+**How to get good recognition** (these are the conditions the model was trained on):
+1. **Face the camera.** Your head and upper body should be visible; the middle of the webcam picture is used.
+2. **One sign at a time:** raise your hand, sign, then **lower your hands out of the picture**. Lowering your hands tells the app the sign is finished.
+3. Sign at a **natural speed**, near **shoulder or chest height**, with good light from the front.
+4. One-handed signs work best. The model saw very few two-handed recordings.
 
-| Metric | Result | Conditions |
-|---|---|---|
-| Sign accuracy | __% (__/__) | __ testers, lighting: __ |
-| Caller → screen latency | __ s | avg of __ calls, venue Wi-Fi |
-| Sign reply → caller hears | __ s | avg of __ calls |
-| Hand model | __ ms/frame, __ fps | [laptop], CPU only |
-| Scenario completed independently | __/5 runs | hospital script |
+**How the app avoids wrong answers:** a sign is accepted only if (a) at least 8 frames show a hand, (b) the model gives it ≥ 45% among the 10 SignConnect signs, and (c) it is also in the model's **top 15 of all 250 signs**. Otherwise Layla sees "Not recognized. Please sign again." You can change these thresholds at the top of `recognizer.py`.
 
-**Impact story (problem understanding):** many Deaf people's first language is a **sign language**, and written Arabic or English is a second language for them. Typing during a fast phone call is slow and stressful, and the alternative is usually asking a family member or interpreter, which costs privacy and independence (for example, medical details). SignConnect lets them **read** the caller and **reply in sign**. For population figures, cite official sources (e.g. the WHO hearing-loss fact sheet, or GASTAT's disability survey for Saudi Arabia) and quote them exactly. Don't estimate.
+**Changing the vocabulary:**
+1. Pick sign names from `models/asl_islr/labels.json`.
+2. Put them in `VOCABULARY` in `recognizer.py`.
+3. Add each sign with its phrase in `SIGNS` in `static/js/config.js`.
+4. Restart the app and test it in `/lab`.
 
 ---
 
-## 10. Implemented / Simulated / Future
+## 9. Figma → code mapping
 
-**IMPLEMENTED (works in the prototype)**
-- Cloud web app (Flask on Render) with two roles: Deaf user and hearing caller
-- Real-time speech-to-text of the caller (Web Speech API, English and Arabic)
-- Webcam sign recognition of 6 static ASL handshapes (pre-trained MediaPipe hand model + kNN classifier trained on our samples), running in the browser on the CPU
-- Text-to-speech of Sara's reply (browser voices), played on the caller's device or the same laptop
-- Call states (ringing, connected, ended), message relay between two devices, call summary with transcript
-- Source labels on every message, latency measurements, built-in accuracy testing
-- Demo mode with clearly labeled pre-written lines, and typed fallback
+| Figma frame | Where in the code |
+|---|---|
+| STEP 1 – Bank: *Calling… Layla* | `caller.html` → `#c-calling` |
+| STEP 2 – Layla: *Mobile / Bank Alinma*, Decline / Accept | `index.html` → `#call-incoming` |
+| STEP 3 – Layla: timer, *SignConnect* button, call controls | `index.html` → `#call-connected` |
+| STEP 4 – Bank: *You are talking to Layla / Deaf user !* | `caller.html` → `#c-talking` |
+| STEP 5 – Layla: *Conversion Speech → Text* | `index.html` → `#call-speech` |
+| STEP 6 – Layla: camera + *SignConnect AI* + text pill | `index.html` → `#call-sign` |
+| STEP 7 – Bank: *Sign Language → Text / Voice* + waveform | `caller.html` → `#c-reply` |
+| Call Summary (not in Figma; built in the same style) | `index.html` → `#call-summary` |
+
+**Small functional additions**, kept in the Figma style:
+- a **Sign** button next to End on step 5
+- ✓ (send) and ↺ (retry) inside the text pill on step 6, so Layla confirms before the caller hears anything
+- a one-line caller caption on step 6
+- *Mute* on step 4 really mutes the caller's microphone
+
+*Speaker, Mute (Layla), More, Keypad, Message, Remind Me* are visual only.
+
+**To fine-tune the look:** in Figma, select a layer → *Inspect / Dev Mode* → copy colours into the variables at the top of `static/css/styles.css` (`--call-bg`, `--call-btn`, `--end-red`, …). Export icons as SVG into `static/assets/`.
+
+---
+
+## 10. Live AI mode and Demo mode
+
+Choose the mode in Layla's app: *Settings → AI mode*.
+
+| | LIVE AI | DEMO |
+|---|---|---|
+| Caller's words | Real speech-to-text (or typed, labeled **TYPED**) | Pre-written lines via the orange **DEMO** buttons **outside** the phone, labeled **DEMO · pre-written, not AI** |
+| Layla's signs | Real ASL model | Live recognition still works; the **"DEMO: scripted reply (not AI)"** button gives labeled pre-written replies |
+| On the phone | – | an orange **DEMO MODE** flag |
+
+**Enforced in code, not only on screen:**
+- every message carries `source` = `live_stt` / `live_sign` / `typed` / `demo_script`
+- the backend **refuses** pre-written lines in a LIVE call
+- timing numbers use live messages only
+- the summary lists what was live, typed, or demo
+- demo controls sit **outside** the phone frame (operator strip), so they're never confused with the product
+
+---
+
+## 11. Measuring impact
+
+| Metric | Where | How to report |
+|---|---|---|
+| Sign accuracy | `/lab` accuracy test | "X% (n/N) on 10 ASL signs, 5 tries each, tester not involved in setup" |
+| Sign → recognized text | Summary | average over 5 live calls |
+| Caller speech → Layla's screen | Summary | average over 5 live calls |
+| Layla sends → caller hears | Summary | average over 5 live calls |
+| ASL model inference | Summary / `/lab` | "~X ms per sign on a free CPU server" |
+| Landmarks per frame | Camera badge (ms, fps) | "X fps on a [laptop], CPU only" |
+| Replies given independently | Summary "Replies by live sign a/b" | over 5 scenario runs |
+| Speech-to-text WER | By hand | wrong + missing + extra words ÷ total words of 5 read sentences |
+
+Don't invent any numbers. For population figures, quote official sources exactly (WHO, GASTAT).
+
+---
+
+## 12. Implemented / Simulated / Future
+
+**IMPLEMENTED**
+- the SignConnect app UI (activation, settings/permissions; real camera permission)
+- the call experience on two phones, matching the Figma
+- live Arabic/English speech-to-text of the caller
+- real ASL sign recognition: MediaPipe Holistic in the browser + pre-trained ASL model on the cloud backend, with confidence thresholds
+- sign → text → speech, played on the caller's phone
+- call summary with measured timings; accuracy test page; Demo mode with labels; typed fallback; cloud deployment
 
 **SIMULATED**
-- The **phone call itself**: there's no cellular or VoIP connection. The incoming call is started by a button or by the caller page in a browser.
-- The **hospital caller** is a teammate using the caller page
-- In DEMO mode: the caller's lines (pre-written) and optionally Sara's reply (pre-written), always labeled
+- the **incoming-call trigger** and the call itself (no cellular network or iOS telephony)
+- the *Phone calls*, *Call audio*, *Voice into the call* and *Notifications* permissions (shown as "Simulated in MVP")
+- in DEMO mode: the pre-written caller lines and replies (always labeled)
+- the visual-only call buttons (Speaker, More, Keypad, …)
 
-**FUTURE (not built)**
-- Real phone network integration (telecom/VoIP provider, mobile OS integration)
-- Saudi Sign Language support (needs a dataset, Deaf signers, validation)
-- Dynamic signs (movement), two-handed signs, facial expressions, sentence-level recognition
-- Production speech-to-text with privacy agreements, user accounts, data protection, and accessibility certification
-
----
-
-## 11. 3-day plan
-
-Suggested roles: **A**: app and AI (sign training, testing); **B**: design (Figma → CSS); **C**: pitch, metrics, and demo script; **D** (if you have one): cloud deployment and second device.
-
-**Day 1: get it running**
-- Morning: everyone runs it locally (6.1–6.3). A deploys to Render (6.7) **on day 1**, not day 3.
-- Afternoon: A trains the 6 signs (6.4) and runs a first Test (6.5). B starts on colours, fonts, and logo (section 7). C writes the problem statement and the honesty slide (section 10).
-- End of day: one full DEMO-mode call and one LIVE call on one laptop.
-
-**Day 2: make it solid**
-- A: record more samples with a second person, re-test, and commit `sign_model.json`. Optionally adapt the vocabulary in `config.js`.
-- B: finish the visual match with Figma for screens 1–7.
-- C/D: two-device call (6.8). Collect metrics over 5 live calls and fill the table in section 9.
-- End of day: full rehearsal with timing (aim for a 2–3 minute live demo).
-
-**Day 3: rehearse and protect the demo**
-- Morning: freeze the code (no new features). Rehearse 3 times, including one rehearsal **in Demo mode**.
-- Record a **backup video** of a successful live call (Windows: Xbox Game Bar `Win+G`; Mac: `Cmd+Shift+5`).
-- Final checklist (section 13).
+**FUTURE**
+- native iOS telephony integration and system permissions
+- Saudi Sign Language dataset, model, and validation with Deaf users
+- larger vocabulary, continuous signing, two-handed and facial grammar
+- production speech-to-text with privacy agreements
 
 ---
 
-## 12. Troubleshooting
+## 13. 3-day plan
 
-| Problem | Cause | Fix |
-|---|---|---|
-| `python` / `py` not recognized | Python is not on PATH | Reinstall Python 3.12.10 and tick *Add python.exe to PATH*; restart VS Code |
-| `Activate.ps1 cannot be loaded` | Windows script policy | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
-| `ModuleNotFoundError: No module named 'flask'` | Virtual environment not active | Activate `.venv` (6.1), then `python -m pip install -r requirements.txt` |
-| `Address already in use` | Port busy | Use `PORT=8001` (see 6.3) |
-| Camera says “permission blocked” | Chrome blocked it | Click the camera icon in the address bar → *Allow* → reload |
-| Camera “used by another app” | Zoom/Teams/Camera app is open | Close those apps |
-| Microphone: “Speech recognition needs internet” | Wi-Fi down, or the network blocks Google | Switch to a phone hotspot, or to DEMO mode |
-| No speech recognition at all | Not Chrome/Edge, or Firefox/Safari | Use Google Chrome |
-| Camera/mic don't work on a phone | Page opened via `http://` (not https) | Use the Render `https://` address |
-| No sound when replying | Volume, wrong output device, or no voice for the language | Check volume and output; try English; on iPhone tap a button first |
-| Captions of the computer's own voice | Using an external speaker next to the mic | Keep the speaker away from the mic, or use two devices |
-| Sign never recognized | No samples, bad light, or hand partly outside the frame | Check the HUD: “no hand” = lighting/framing; “unknown” = record more samples |
-| Wrong sign recognized | Similar handshapes | Record more samples of both signs; exaggerate the difference |
-| HUD shows fewer than 10 fps | Slow laptop or battery saver | Plug in the charger, close other tabs; or try the graphics chip by adding `?gpu=1` to the address |
-| Two devices don't see each other | Different room names, or not the same server | Same address (Render) and same room on both devices |
-| Render: `gunicorn: command not found` | Build failed | Check that the build log ran `pip install -r requirements.txt` without errors |
-| Render: site takes ~1 minute to load | Free server was asleep | Open it 5 minutes before the demo |
-| Calls “disappear” | Server restarted (free plan, redeploy) | Normal; start a new call |
-| You changed a file but nothing changes | Browser cache | `Ctrl+Shift+R` (Mac `Cmd+Shift+R`) |
-| After editing, the page is broken | A typo in JS/HTML | F12 → Console → the red error shows the file and line |
+- **Day 1:** everyone installs (7.1–7.3) and does the run-through (7.4). Deploy to Render (7.6). The signer learns the 10 signs and practises in `/lab`.
+- **Day 2:** run the accuracy test (7.5) and collect timings from 5 live calls. Do a two-device rehearsal (7.7). Fine-tune colours against Figma. Write the honesty slide (section 12).
+- **Day 3:** freeze the code. Rehearse 3 times, including once in DEMO mode. Record a backup video. Run the final checklist (section 15).
 
 ---
 
-## 13. Final demo checklist
+## 14. Troubleshooting
 
-**The night before**
-- [ ] Latest code pushed; Render shows *Live*; the Render URL works on both devices
-- [ ] `sign_model.json` committed; the Test screen shows ≥ 80% on the presenting laptop (if it doesn't, record more samples)
-- [ ] Metrics table filled in with real numbers
-- [ ] Backup video recorded
-
-**30 minutes before**
-- [ ] Laptops charged and plugged in; battery saver off; notifications off (Focus / Do Not Disturb)
-- [ ] Chrome only; close Zoom, Teams, and the Camera app
-- [ ] Open the Render URL (wakes the server) on both devices; room `sara` on both
-- [ ] Allow camera and microphone; run one quick test call; check volume
-- [ ] Light in front of the signer; plain background
-- [ ] Phone hotspot ready; know how to switch to DEMO mode
-
-**During the demo (2–3 minutes)**
-1. Problem in one sentence: *“Sara is Deaf. The hospital calls to confirm her appointment. Today she needs another person to make that call for her.”*
-2. Incoming call → Answer (point out the **SIMULATED CALL** label honestly).
-3. The caller speaks → captions appear live.
-4. Sara signs YES / FINE / PHONE → the caller's device speaks.
-5. End → Summary: show the **LIVE** labels and measured latency.
-6. Close with the honesty slide (Implemented / Simulated / Future) and the roadmap.
+| Problem | Fix |
+|---|---|
+| `python`/`py` not recognized | Reinstall Python 3.12.10 with "Add to PATH"; restart VS Code |
+| `Activate.ps1 cannot be loaded` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
+| `ModuleNotFoundError` | Activate `.venv`, then `python -m pip install -r requirements.txt` |
+| `No matching distribution found for ai-edge-litert` | Intel Mac or 32-bit Python: use 64-bit Python 3.12 on Windows or an Apple-Silicon Mac, or the Render link |
+| Strip says "ASL model: NOT loaded" | Check the terminal for the error; open `/api/model` |
+| `Address already in use` | Use another port: Windows `$env:PORT=8001; python app.py`, Mac `PORT=8001 python app.py` |
+| Camera blocked | Click the camera icon in the address bar → Allow → reload |
+| "Not recognized" every time | Face the camera, upper body visible, **lower your hands after each sign**, sign at normal speed, practise with a video. Check `/lab` raw output. |
+| Always the same wrong sign | Check how the sign is performed; try it at chest/shoulder height; check the top-5 list in `/lab` |
+| "Too short" | Sign a little slower; keep your hand in the picture for about 1 second |
+| Low fps (< 10) | Plug in the charger, close other tabs; try `?gpu=1` |
+| No captions | Use Chrome, allow the microphone, check the internet (or use DEMO mode) |
+| No voice on the caller's phone | Check the volume; on a phone, tap something first |
+| The phones don't see each other | Same address and same room name on both |
+| Render takes about 1 minute to load | The free server was asleep; open it early |
 
 ---
 
-## 14. Roadmap
+## 15. Final demo checklist
 
-| Phase | What | How (technically credible) |
-|---|---|---|
-| 1 | Bigger vocabulary, dynamic signs | Move from single-frame handshapes to **landmark sequences** (hands + pose + face) and a small sequence model (1D-CNN/Transformer), starting from the public 250-sign ASL ISLR dataset and models |
-| 2 | Saudi Sign Language | Partner with Deaf associations and SSL interpreters; record and annotate an SSL dataset with consent; train and validate per sign; publish the measured accuracy |
-| 3 | Testing with Deaf users | Usability sessions with Deaf users and accessibility experts; measure task completion, time, and satisfaction; iterate on the UI (captions, contrast, vibration) |
-| 4 | Real-time & accuracy | Continuous signing (no button), confidence-based confirmation, production STT with Arabic dialect support and privacy agreements, on-device models |
-| 5 | Real telecom integration | VoIP/telephony provider (e.g. SIP or programmable voice APIs) to bridge real calls; then mobile apps; follow platform rules for call audio |
-| 6 | Sector rollout | Pilot with one hospital appointment centre, then banks, universities, government services; integrate with existing contact-centre software |
+- [ ] Render shows *Live*; `/api/health` shows `sign_model_ready: true`
+- [ ] Accuracy test done; numbers on the slides
+- [ ] The signer has practised the demo signs (YES, NO, THANK YOU, BYE) at least 20 times in `/lab`
+- [ ] Laptops charged, notifications off, Zoom/Teams closed
+- [ ] Site opened 5 minutes early on both devices; same room
+- [ ] Camera and microphone allowed; volume up; light in front of the signer
+- [ ] You know how to switch to DEMO mode; a backup video is ready
+
+**Demo script (2–3 minutes):**
+1. Show the SignConnect app: activated once, permissions honestly marked "Simulated in MVP".
+2. The bank calls (left phone) → Layla's phone rings (simulated trigger) → Accept.
+3. The bank speaks Arabic → the text appears for Layla.
+4. Layla presses **Sign**, signs **YES** → *نعم، أكّد الموعد* → ✓ → the bank's phone **speaks** it.
+5. NO + THANK YOU, BYE → End → summary with **LIVE** labels and measured timings.
+6. Honesty slide + roadmap.
 
 ---
 
-## 15. How the code works
+## 16. Roadmap
 
-**One call, step by step:**
-1. **Ring:** the caller page (or the simulate button) sends `POST /api/rooms/sara/ring`. The server sets the status to `ringing`.
-2. Sara's page polls `GET /api/rooms/sara?since=0` every 0.7 s, sees `ringing`, and shows screen 1.
-3. **Answer:** `POST /api/rooms/sara/answer` → `connected`. Both pages show the call screens.
-4. **Caller speaks:** `speech.js` (Web Speech API) produces text → `POST /api/rooms/sara/messages` with `source: "live_stt"`.
-5. Sara's next poll receives it, shows it, and sends `POST .../messages/1/ack {"event": "displayed"}` (used for the latency number).
-6. **Sara signs:** `signs.js` gets 21 hand points per frame from MediaPipe, turns them into 63 numbers, the kNN classifier votes, and the stabilizer waits 0.7 s → sign `YES` → phrase “Yes.” (`config.js`).
-7. **Send:** `POST .../messages` with `source: "live_sign"` and the signs used.
-8. **Speak:** the caller page receives it and plays it with `speechSynthesis`. When audio starts it sends `ack {"event": "spoken"}`.
-9. **End:** `POST /api/rooms/sara/end` → the server builds the summary (`build_summary` in `app.py`).
+| Phase | What |
+|---|---|
+| 1 | Larger vocabulary (more of the 250 ASL signs, then a larger dataset), continuous signing |
+| 2 | **Saudi Sign Language**: collect a consented SSL dataset with Deaf associations and interpreters; train and validate per sign |
+| 3 | Testing with Deaf users and accessibility experts (task completion, time, satisfaction) |
+| 4 | Real-time accuracy: better segmentation, confidence-based confirmation, on-device models |
+| 5 | **Native iOS telephony integration** (call trigger, call audio, system permissions) |
+| 6 | Pilots: banks, hospitals, universities, government services, contact centres |
 
-**API reference**
+---
+
+## 17. How the code works
+
+### 17.1 One call
+1. Caller **Call** → `POST /api/rooms/layla/ring`.
+2. Layla's phone polls `GET /api/rooms/layla` every 0.7 s, sees `ringing`, and (if activated) opens the call experience.
+3. **Accept** → `POST …/answer {"mode": "live"}`.
+4. The caller speaks → STT → `POST …/messages {"sender":"caller","source":"live_stt"}` → shown on Layla's step 5 → ack `displayed`.
+5. Layla signs → `signs.js` records the landmarks until her hands go down → `POST /api/recognize`.
+6. `recognizer.py` builds a `[frames, 543, 3]` array → the ASL model → 250 probabilities → the best of the 10 SignConnect signs → accept or reject.
+7. Layla taps ✓ → `POST …/messages {"sender":"user","source":"live_sign","meta":{"signs":["yes"],…}}`.
+8. The caller's phone speaks the text → ack `spoken`. End → `POST …/end` → summary.
+
+### 17.2 API
 
 | Method & path | Purpose |
 |---|---|
-| `GET /api/health` | Is the server alive? |
-| `GET /api/rooms/<room>?since=<n>&role=user\|caller` | Call status + messages newer than `n` |
-| `POST /api/rooms/<room>/ring` | `{"mode": "live"\|"demo", "origin": "caller_page"\|"simulated_button"}` |
-| `POST /api/rooms/<room>/answer` · `/decline` · `/end` | Call control |
-| `POST /api/rooms/<room>/messages` | `{"sender": "caller"\|"user", "source": "live_stt"\|"live_sign"\|"typed"\|"demo_script", "text": "...", "meta": {...}, "origin_at": ms}` |
-| `POST /api/rooms/<room>/messages/<seq>/ack` | `{"event": "displayed"\|"spoken"}` |
-| `GET /api/rooms/<room>/summary` | Call summary |
-| `GET/POST /api/evaluations` | Accuracy test results |
+| `GET /api/health` | Server alive + `sign_model_ready` |
+| `GET /api/model` | Model info, vocabulary, thresholds |
+| `POST /api/recognize` | `{"frames":[{"lips":[x,y…80],"left":[…42]\|null,"right":[…42]\|null,"pose":[…20]\|null}]}` → sign, confidence, top 5 |
+| `GET /api/rooms/<room>?since=<n>` | Call status + new messages |
+| `POST /api/rooms/<room>/ring` · `/answer` · `/decline` · `/end` | Call control |
+| `POST /api/rooms/<room>/messages` | Send text (`sender`, `source`, `text`, `meta`) |
+| `POST /api/rooms/<room>/messages/<seq>/ack` | `displayed` / `spoken` (timings) |
+| `GET /api/rooms/<room>/summary` | Summary |
+| `GET/POST /api/evaluations` | Accuracy tests |
 
-**Changing the vocabulary:** edit `SIGNS` in `static/js/config.js` (add `{ id, handshape, asl, phrase: {en, ar} }`), reload, record samples for the new sign on the Train screen, test, then export and commit the model.
+### 17.3 Model input
+The model expects MediaPipe Holistic landmarks in the layout it was trained on: 468 face, 21 left hand, 33 pose, 21 right hand per frame. Missing parts are `NaN`. Only x and y are used. The browser sends just the 40 lip points, both hands, and 10 arm points; the server fills in the rest.
 
-**Changing the demo script:** edit `DEMO_SCRIPT` in the same file.
+### 17.4 Why version 1 showed the hand but no sign
+Version 1 drew MediaPipe's **hand landmarks** (that is detection) and then used a k-nearest-neighbour classifier. That classifier only knows signs the team has **recorded on its Train screen**, and the bundled sample file `static/models/sign_model.json` was **empty**. With no examples to compare against, it always answered "unknown". Detection worked; classification had no knowledge.
+
+Version 2 replaces it with a **pre-trained** ASL model that already knows 250 signs. Every label shown comes from that model's output.

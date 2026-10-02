@@ -152,7 +152,7 @@ function pickVoice(voices, lang) {
 }
 
 // Some browsers (iPhone Safari) only allow speech after the user has tapped something.
-// Call this inside a click handler once, e.g. on "Answer" or "Call Sara".
+// Call this inside a click handler once, e.g. on "Answer" or "Call".
 export function unlockSpeech() {
   if (!ttsSupported()) return;
   try {
