@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SignConnect">
+  <!-- Placeholder logo. Replace with your own logo exported from Figma (File > Export > SVG). -->
+  <rect width="64" height="64" rx="16" fill="#0f766e"/>
+  <path d="M22 44V24a3 3 0 0 1 6 0v12V18a3 3 0 0 1 6 0v18-14a3 3 0 0 1 6 0v16-8a3 3 0 0 1 6 0v12c0 8-6 14-14 14h-2c-4 0-7-2-9-5l-7-10a3 3 0 0 1 5-3z" fill="#fff"/>
+</svg>

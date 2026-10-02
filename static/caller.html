@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SignConnect Caller</title>
+  <link rel="icon" href="/static/assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="caller-app">
+
+<div class="prototype-strip">
+  <span><strong>Hearing caller</strong> · this page plays the role of the hospital’s phone (simulated call, no cellular network)</span>
+  <span id="netStatus" class="net ok">● server connected</span>
+</div>
+
+<main class="phone caller-phone">
+  <header class="phone-bar">
+    <span class="brand">🏥 Hospital phone</span>
+    <span id="statusBadge" class="badge">READY</span>
+  </header>
+
+  <!-- Before the call -->
+  <section class="screen active" id="c-setup">
+    <div class="home-hero">
+      <div class="avatar big">🏥</div>
+      <h1>Appointments Desk</h1>
+      <p class="muted">You are the hearing caller. Speak normally – Sara will read your words. Her signed replies will be spoken aloud here.</p>
+    </div>
+    <div class="card">
+      <label class="field">Room name (same as Sara’s screen)<input id="cRoom" maxlength="32"></label>
+      <label class="field">Your language
+        <select id="cLang"><option value="en-US">English (en-US)</option><option value="ar-SA">Arabic (ar-SA)</option></select>
+      </label>
+      <label class="field">Calling as<input id="cName" maxlength="80" value="City General Hospital"></label>
+      <p id="cWarning" class="warning hidden"></p>
+    </div>
+    <button class="btn primary big" id="btnCall">📞 Call Sara</button>
+    <p class="hint">On Sara’s laptop, set “The hearing caller is…” to <b>on another device</b>.</p>
+  </section>
+
+  <!-- Ringing -->
+  <section class="screen screen-dark" id="c-ringing">
+    <div class="sim-tag">SIMULATED CALL</div>
+    <div class="incoming">
+      <div class="ring-flash"><div class="avatar huge">S</div></div>
+      <h1>Calling Sara…</h1>
+      <p class="muted-light">Waiting for Sara to answer on SignConnect</p>
+    </div>
+    <div class="call-actions single"><button class="round decline" id="btnCancel">✕<span>Cancel</span></button></div>
+  </section>
+
+  <!-- In call -->
+  <section class="screen" id="c-call">
+    <div class="call-head">
+      <div class="avatar">S</div>
+      <div><strong>Sara (via SignConnect)</strong><br><span class="timer" id="cTimer">00:00</span></div>
+      <button class="btn danger small" id="btnHangUp">End</button>
+    </div>
+    <div id="cMic" class="mic-status"></div>
+    <div class="live-caption">
+      <div class="caption-label">What Sara reads (your words):</div>
+      <div id="cInterim" class="caption-interim" dir="auto">Start speaking…</div>
+    </div>
+    <div id="cSpeaking" class="speaking-bar hidden">
+      <div class="wave small"><i></i><i></i><i></i><i></i><i></i></div>
+      <span>Sara says: <b id="cSpeakingText" dir="auto"></b></span>
+    </div>
+    <div class="transcript" id="cTranscript"></div>
+    <form id="cTypeForm" class="row">
+      <input id="cTypeText" placeholder="Type instead (fallback)…" maxlength="300" dir="auto">
+      <button class="btn">Send</button>
+    </form>
+  </section>
+
+  <!-- Ended -->
+  <section class="screen" id="c-ended">
+    <div class="home-hero">
+      <div class="avatar big">✓</div>
+      <h1>Call ended</h1>
+      <p class="muted" id="cEndedText"></p>
+    </div>
+    <button class="btn primary big" id="btnNew">New call</button>
+  </section>
+
+  <div id="toast" class="toast"></div>
+</main>
+
+<script type="module" src="/static/js/caller.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+# Local secrets (not needed by this project, but never commit them)
+.env

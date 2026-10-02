@@ -1,0 +1,14 @@
+# Render "Blueprint" file: tells Render how to build and start SignConnect.
+# Render reads this automatically when you choose New + > Blueprint.
+services:
+  - type: web
+    name: signconnect
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # Keep --workers 1: all call data lives in the memory of a single process.
+    startCommand: gunicorn app:app --workers 1 --threads 8 --timeout 60 --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
